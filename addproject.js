@@ -480,6 +480,7 @@ auth.onAuthStateChanged((user) => {
 });
 
 // ===== Thêm thanh công cụ bên trái (Sidebar) =====
+// ===== Thêm thanh công cụ bên trái (Sidebar) =====
 function setupSidebar() {
   let homeIcon = document.getElementById("homeIcon");
   if (!homeIcon) {
@@ -494,17 +495,19 @@ function setupSidebar() {
   if (!sidebar) {
     sidebar = document.createElement("div");
     sidebar.id = "projectSidebar";
-    sidebar.className = "fixed top-0 left-0 h-full w-[2cm] bg-gradient-to-b from-green-900 to-black text-white shadow-lg z-40 overflow-y-auto p-4 hidden";
+    sidebar.className = "fixed top-6 left-0 h-full w-[2cm] bg-gradient-to-b from-green-900 to-black text-white shadow-lg z-40 overflow-y-auto p-4 hidden";
     sidebar.innerHTML = `
-      <h3 class="text-lg font-bold mb-4 text-green-200">Danh sách dự án</h3>
+      <h3 class="text-lg font-bold mb-4 text-green-200">Project</h3>
+      // <div id="username" class="text-sm mb-2">Cuong</div>
       <ul id="sidebarProjectList" class="space-y-2"></ul>
     `;
     document.body.appendChild(sidebar);
   }
+
   homeIcon.addEventListener("click", () => {
     sidebar.classList.toggle("hidden");
   });
-
+}
   const projectsCol = collection(db, "projects");
   const q = query(projectsCol, orderBy("createdAt", "desc"));
 
@@ -527,6 +530,7 @@ function setupSidebar() {
     });
   });
 }
+
 
 
 
