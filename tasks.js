@@ -999,12 +999,12 @@ function openTaskModal(systemId, groupId, projectId) {
 
 // ===== Kéo & Thả (Drag & Drop) =====
 function setupDragDrop() {
+  const todoCol = document.getElementById("todoCol");
   const inprogressCol = document.getElementById("inprogressSystems");
   const doneCol = document.getElementById("doneSystems");
 
+  // Thiết lập sự kiện drop cho tất cả các vùng chứa System trong cột In Progress và Done
   [inprogressCol, doneCol].forEach(col => {
-    if (!col) return;
-    
     col.addEventListener("dragover", (e) => {
       e.preventDefault();
       const dropZone = e.target.closest('[data-system-id]');
@@ -1022,10 +1022,8 @@ function setupDragDrop() {
       e.target.closest('[data-system-id]')?.classList.remove('bg-blue-100');
 
       const type = e.dataTransfer.getData("type");
-      if (type !== "task") return;
-
       const taskId = e.dataTransfer.getData("taskId");
-      if (!taskId) return;
+      if (type !== "task" || !taskId) return;
       
       const dropTarget = e.target.closest('[data-system-id]');
       if (!dropTarget) return;
