@@ -189,9 +189,13 @@ function setupProjectListener() {
     });
 
     projectArea.innerHTML = "";
-    snapshot.forEach((doc) => {
-      renderProject(doc);
-    });
+    if (snapshot.empty) {
+        projectArea.innerHTML = `<p class="text-gray-500 text-center">Không có dự án nào. Vui lòng thêm một dự án mới.</p>`;
+    } else {
+        snapshot.forEach((doc) => {
+            renderProject(doc);
+        });
+    }
 
     // Events
     document.querySelectorAll(".edit-btn").forEach((btn) => {
@@ -481,7 +485,7 @@ auth.onAuthStateChanged((user) => {
     addProjectBtn.classList.remove("hidden");
     setupProjectListener();
   } else {
-    projectArea.innerHTML = "";
+    projectArea.innerHTML = `<p class="text-gray-500 text-center">Vui lòng đăng nhập để xem và quản lý dự án của bạn.</p>`;
     addProjectBtn.classList.add("hidden");
   }
 });
