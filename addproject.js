@@ -507,7 +507,7 @@ function setupSidebar() {
   homeIcon.addEventListener("click", () => {
     sidebar.classList.toggle("hidden");
   });
-}
+
   const projectsCol = collection(db, "projects");
   const q = query(projectsCol, orderBy("createdAt", "desc"));
 
@@ -530,6 +530,7 @@ function setupSidebar() {
     });
   });
 }
+
 
 
 
