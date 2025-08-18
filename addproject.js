@@ -118,6 +118,36 @@ function scrollToProjectTitle() {
   }
 }
 
+// ===== Calculate countdown and update color =====
+function updateCountdownAndColor(projectCard, endDate) {
+  if (!endDate) {
+    projectCard.querySelector(".countdown")?.remove();
+    return;
+  }
+
+  const now = new Date();
+  const end = new Date(endDate);
+  const diffMs = end - now;
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  let countdownElement = projectCard.querySelector(".countdown");
+  if (!countdownElement) {
+    countdownElement = document.createElement("p");
+    countdownElement.className = "text-gray-500 text-sm countdown";
+    projectCard.insertBefore(countdownElement, projectCard.querySelector("div.flex"));
+  }
+
+  if (diffMs <= 0) {
+    countdownElement.textContent = "Đã đến hạn";
+    projectCard.classList.add("bg-green-500");
+    projectCard.classList.remove("bg-white");
+  } else {
+    countdownElement.textContent = `Còn ${diffDays} ngày`;
+    projectCard.classList.remove("bg-green-500");
+    projectCard.classList.add("bg-white");
+  }
+}
+
 // ===== Render project card =====
 function renderProject(docSnap) {
   const data = docSnap.data();
@@ -145,6 +175,12 @@ function renderProject(docSnap) {
     </div>
   `;
   projectArea.appendChild(projectCard);
+
+  // Cập nhật thời gian đếm ngược và màu sắc
+  updateCountdownAndColor(projectCard, data.endDate);
+
+  // Cập nhật realtime cho đếm ngược
+  setInterval(() => updateCountdownAndColor(projectCard, data.endDate), 60000); // Cập nhật mỗi phút
 }
 
 // ===== Real-time listener =====
@@ -194,7 +230,7 @@ function setupProjectListener() {
           openedProjectId = id;
           console.log("Viewing tasks for project:", id);
           showTaskBoard(id, projectTitle);
-          setTimeout(scrollToProjectTitle, 100); // Delay scroll to ensure DOM is updated
+          setTimeout(scrollToProjectTitle, 100);
         }
       });
     });
@@ -486,7 +522,7 @@ function setupSidebar() {
         openedProjectId = id;
         showTaskBoard(id, data.title);
         sidebar.classList.add("hidden");
-        setTimeout(scrollToProjectTitle, 100); // Delay scroll to ensure DOM is updated
+        setTimeout(scrollToProjectTitle, 100);
       });
       sidebarList.appendChild(listItem);
     });
