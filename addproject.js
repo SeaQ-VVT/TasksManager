@@ -90,10 +90,7 @@ function ensureCopyModal() {
 // ===== State =====
 let isEditing = false;
 let currentProjectId = null;
-// nhớ dự án đang mở để không bị nhảy sang dự án khác khi realtime update
 let openedProjectId = null;
-// giữ các interval để clear khi re-render
-let countdownIntervals = [];
 
 // ===== Utility =====
 function showModal(modalId) {
@@ -112,6 +109,30 @@ function hideModal(modalId) {
 function displayName(email) {
   if (!email) return "Ẩn danh";
   return String(email).split("@")[0];
+}
+
+// ===== Countdown timer update =====
+function updateCountdown(endDate, countdownElement) {
+  const now = new Date().getTime();
+  const end = new Date(endDate).getTime();
+  const distance = end - now;
+
+  // Tính toán ngày, giờ, phút, giây
+  const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+  if (distance > 0) {
+    countdownElement.textContent = `Còn lại: ${days} ngày, ${hours} giờ, ${minutes} phút, ${seconds} giây`;
+    countdownElement.style.color = 'green';
+    countdownElement.style.fontWeight = 'bold';
+  } else {
+    countdownElement.textContent = "Đã kết thúc";
+    countdownElement.style.color = 'red';
+    countdownElement.style.fontWeight = 'bold';
+    clearInterval(countdownElement.intervalId);
+  }
 }
 
 // ===== Render project card =====
@@ -133,6 +154,10 @@ function renderProject(docSnap) {
     <p class="text-gray-500 text-sm"><b>Ghi chú:</b> ${data.comment || "-"}</p>
     <p class="text-gray-500 text-sm"><b>Người tạo:</b> ${displayName(data.createdBy)}</p>
     <p class="text-gray-500 text-sm mb-4"><b>Ngày tạo:</b> ${createdAt}</p>
+    <div class="font-bold text-center text-lg text-blue-700 my-2">
+      ${data.title}
+    </div>
+    <div id="countdown-${id}" class="text-center font-bold text-lg my-2"></div>
     <div class="flex space-x-2 mt-2">
       <button data-id="${id}" class="view-tasks-btn bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-md text-sm">👁️</button>
       <button data-id="${id}" class="copy-btn bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-md text-sm">📋</button>
@@ -142,43 +167,13 @@ function renderProject(docSnap) {
   `;
   projectArea.appendChild(projectCard);
 
-  // ===== Countdown tính thời gian còn lại =====
+  // Khởi tạo bộ đếm ngược
+  const countdownElement = document.getElementById(`countdown-${id}`);
   if (data.endDate) {
-    const countdownEl = document.createElement("p");
-    countdownEl.className = "text-red-600 font-semibold mt-2";
-    projectCard.appendChild(countdownEl);
-
-    function updateCountdown() {
-      const now = Date.now();
-      // Nếu endDate từ <input type="date"> → YYYY-MM-DD, tính đến cuối ngày local
-      const endMs = new Date(
-        /\d{4}-\d{2}-\d{2}$/.test(data.endDate)
-          ? `${data.endDate}T23:59:59`
-          : data.endDate
-      ).getTime();
-
-      if (Number.isNaN(endMs)) {
-        countdownEl.textContent = "⏰ Ngày kết thúc không hợp lệ";
-        return;
-      }
-
-      const distance = endMs - now;
-      if (distance <= 0) {
-        countdownEl.textContent = "⏰ Đã hết hạn";
-        return;
-      }
-
-      const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-      countdownEl.textContent = `⏳ Còn lại: ${days}d ${hours}h ${minutes}m ${seconds}s`;
-    }
-
-    updateCountdown();
-    const tId = setInterval(updateCountdown, 1000);
-    countdownIntervals.push(tId);
+    updateCountdown(data.endDate, countdownElement);
+    countdownElement.intervalId = setInterval(() => {
+      updateCountdown(data.endDate, countdownElement);
+    }, 1000);
   }
 }
 
@@ -188,15 +183,19 @@ function setupProjectListener() {
   const q = query(projectsCol, orderBy("createdAt", "desc"));
 
   onSnapshot(q, (snapshot) => {
-    // clear các countdown cũ trước khi render lại
-    countdownIntervals.forEach((id) => clearInterval(id));
-    countdownIntervals = [];
-
-    // Chỉ render lại danh sách thẻ dự án, KHÔNG đụng taskBoard
-    projectArea.innerHTML = "";
-    snapshot.forEach((doc) => {
-      renderProject(doc);
+    // Xóa các bộ đếm ngược cũ trước khi render lại
+    document.querySelectorAll('[id^="countdown-"]').forEach(el => {
+        clearInterval(el.intervalId);
     });
+
+    projectArea.innerHTML = "";
+    if (snapshot.empty) {
+        projectArea.innerHTML = `<p class="text-gray-500 text-center">Không có dự án nào. Vui lòng thêm một dự án mới.</p>`;
+    } else {
+        snapshot.forEach((doc) => {
+            renderProject(doc);
+        });
+    }
 
     // Events
     document.querySelectorAll(".edit-btn").forEach((btn) => {
@@ -286,6 +285,7 @@ saveProjectBtn.addEventListener("click", async () => {
     projectEndInput.value = "";
     projectCommentInput.value = "";
     // giữ nguyên isEditing theo flow hiện tại
+
   } catch (e) {
     console.error("Error adding/updating project: ", e);
   }
@@ -408,6 +408,7 @@ if (confirmCopyBtn) {
 
       hideModal("copyModal");
       console.log("Đã sao chép dự án và toàn bộ dữ liệu liên quan thành công!");
+
     } catch (e) {
       console.error("Lỗi khi sao chép dự án:", e);
     } finally {
@@ -445,15 +446,13 @@ confirmDeleteBtn.addEventListener("click", async () => {
     const logsSnapshot = await getDocs(logsQuery);
     const logsToDelete = logsSnapshot.docs.map((docu) => deleteDoc(docu.ref));
     await Promise.all(logsToDelete);
-
-    // Delete all progress_history
+    // ✅ Delete all progress_history
     const progressQuery = query(collection(db, "progress_history"), where("projectId", "==", currentProjectId));
     const progressSnapshot = await getDocs(progressQuery);
     await Promise.all(progressSnapshot.docs.map((docu) => deleteDoc(docu.ref)));
-
     // Finally, delete the project document itself
     await deleteDoc(doc(db, "projects", currentProjectId));
-
+    // 🔻 THÊM 4 DÒNG NÀY Ở ĐÂY
     if (openedProjectId === currentProjectId) {
       const taskBoard = document.getElementById("taskBoard");
       if (taskBoard) taskBoard.innerHTML = "";
@@ -486,7 +485,7 @@ auth.onAuthStateChanged((user) => {
     addProjectBtn.classList.remove("hidden");
     setupProjectListener();
   } else {
-    projectArea.innerHTML = "";
+    projectArea.innerHTML = `<p class="text-gray-500 text-center">Vui lòng đăng nhập để xem và quản lý dự án của bạn.</p>`;
     addProjectBtn.classList.add("hidden");
   }
 });
