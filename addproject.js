@@ -439,11 +439,67 @@ auth.onAuthStateChanged((user) => {
   if (user) {
     addProjectBtn.classList.remove("hidden");
     setupProjectListener();
+    setupSidebar(); // Thêm setup sidebar khi user login
   } else {
     projectArea.innerHTML = "";
     addProjectBtn.classList.add("hidden");
+    // Xóa sidebar nếu logout
+    const sidebar = document.getElementById("projectSidebar");
+    if (sidebar) sidebar.remove();
+    const homeIcon = document.getElementById("homeIcon");
+    if (homeIcon) homeIcon.remove();
   }
 });
 
+// ===== Thêm thanh công cụ bên trái (Sidebar) =====
+function setupSidebar() {
+  // Tạo biểu tượng home fixed ở góc trái trên
+  let homeIcon = document.getElementById("homeIcon");
+  if (!homeIcon) {
+    homeIcon = document.createElement("button");
+    homeIcon.id = "homeIcon";
+    homeIcon.innerHTML = "🏠";
+    homeIcon.className = "fixed top-4 left-4 z-50 text-3xl bg-white rounded-full p-2 shadow-lg hover:bg-gray-100 transition";
+    document.body.appendChild(homeIcon);
+  }
 
+  // Tạo sidebar fixed bên trái, mặc định ẩn
+  let sidebar = document.getElementById("projectSidebar");
+  if (!sidebar) {
+    sidebar = document.createElement("div");
+    sidebar.id = "projectSidebar";
+    sidebar.className = "fixed top-0 left-0 h-full w-64 bg-white shadow-lg z-40 overflow-y-auto p-4 hidden";
+    sidebar.innerHTML = `
+      <h3 class="text-lg font-bold mb-4">Danh sách dự án</h3>
+      <ul id="sidebarProjectList" class="space-y-2"></ul>
+    `;
+    document.body.appendChild(sidebar);
+  }
 
+  // Toggle sidebar khi click home icon
+  homeIcon.addEventListener("click", () => {
+    sidebar.classList.toggle("hidden");
+  });
+
+  // Real-time listener cho danh sách dự án trong sidebar
+  const projectsCol = collection(db, "projects");
+  const q = query(projectsCol, orderBy("createdAt", "desc"));
+
+  onSnapshot(q, (snapshot) => {
+    const sidebarList = document.getElementById("sidebarProjectList");
+    sidebarList.innerHTML = "";
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      const id = doc.id;
+      const listItem = document.createElement("li");
+      listItem.className = "cursor-pointer text-blue-600 hover:underline";
+      listItem.textContent = data.title;
+      listItem.addEventListener("click", () => {
+        openedProjectId = id;
+        showTaskBoard(id, data.title);
+        sidebar.classList.add("hidden"); // Ẩn sidebar sau khi chọn
+      });
+      sidebarList.appendChild(listItem);
+    });
+  });
+}
