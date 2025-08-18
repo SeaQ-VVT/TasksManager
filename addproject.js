@@ -90,6 +90,7 @@ function ensureCopyModal() {
 // ===== State =====
 let isEditing = false;
 let currentProjectId = null;
+// >>> NEW: nhớ dự án đang mở để không bị nhảy sang dự án khác khi realtime update
 let openedProjectId = null;
 
 // ===== Utility =====
@@ -111,30 +112,6 @@ function displayName(email) {
   return String(email).split("@")[0];
 }
 
-// ===== Countdown timer update =====
-function updateCountdown(endDate, countdownElement) {
-  const now = new Date().getTime();
-  const end = new Date(endDate).getTime();
-  const distance = end - now;
-
-  // Tính toán ngày, giờ, phút, giây
-  const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-  if (distance > 0) {
-    countdownElement.textContent = `Còn lại: ${days} ngày, ${hours} giờ, ${minutes} phút, ${seconds} giây`;
-    countdownElement.style.color = 'green';
-    countdownElement.style.fontWeight = 'bold';
-  } else {
-    countdownElement.textContent = "Đã kết thúc";
-    countdownElement.style.color = 'red';
-    countdownElement.style.fontWeight = 'bold';
-    clearInterval(countdownElement.intervalId);
-  }
-}
-
 // ===== Render project card =====
 function renderProject(docSnap) {
   const data = docSnap.data();
@@ -154,10 +131,6 @@ function renderProject(docSnap) {
     <p class="text-gray-500 text-sm"><b>Ghi chú:</b> ${data.comment || "-"}</p>
     <p class="text-gray-500 text-sm"><b>Người tạo:</b> ${displayName(data.createdBy)}</p>
     <p class="text-gray-500 text-sm mb-4"><b>Ngày tạo:</b> ${createdAt}</p>
-    <div class="font-bold text-center text-lg text-blue-700 my-2">
-      ${data.title}
-    </div>
-    <div id="countdown-${id}" class="text-center font-bold text-lg my-2"></div>
     <div class="flex space-x-2 mt-2">
       <button data-id="${id}" class="view-tasks-btn bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-md text-sm">👁️</button>
       <button data-id="${id}" class="copy-btn bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-md text-sm">📋</button>
@@ -166,15 +139,6 @@ function renderProject(docSnap) {
     </div>
   `;
   projectArea.appendChild(projectCard);
-
-  // Khởi tạo bộ đếm ngược
-  const countdownElement = document.getElementById(`countdown-${id}`);
-  if (data.endDate) {
-    updateCountdown(data.endDate, countdownElement);
-    countdownElement.intervalId = setInterval(() => {
-      updateCountdown(data.endDate, countdownElement);
-    }, 1000);
-  }
 }
 
 // ===== Real-time listener =====
@@ -183,19 +147,11 @@ function setupProjectListener() {
   const q = query(projectsCol, orderBy("createdAt", "desc"));
 
   onSnapshot(q, (snapshot) => {
-    // Xóa các bộ đếm ngược cũ trước khi render lại
-    document.querySelectorAll('[id^="countdown-"]').forEach(el => {
-        clearInterval(el.intervalId);
-    });
-
+    // Chỉ render lại danh sách thẻ dự án, KHÔNG đụng taskBoard
     projectArea.innerHTML = "";
-    if (snapshot.empty) {
-        projectArea.innerHTML = `<p class="text-gray-500 text-center">Không có dự án nào. Vui lòng thêm một dự án mới.</p>`;
-    } else {
-        snapshot.forEach((doc) => {
-            renderProject(doc);
-        });
-    }
+    snapshot.forEach((doc) => {
+      renderProject(doc);
+    });
 
     // Events
     document.querySelectorAll(".edit-btn").forEach((btn) => {
@@ -485,7 +441,10 @@ auth.onAuthStateChanged((user) => {
     addProjectBtn.classList.remove("hidden");
     setupProjectListener();
   } else {
-    projectArea.innerHTML = `<p class="text-gray-500 text-center">Vui lòng đăng nhập để xem và quản lý dự án của bạn.</p>`;
+    projectArea.innerHTML = "";
     addProjectBtn.classList.add("hidden");
   }
 });
+
+
+
