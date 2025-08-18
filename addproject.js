@@ -498,7 +498,7 @@ function setupSidebar() {
     sidebar.className = "fixed top-6 left-0 h-full w-[2cm] bg-gradient-to-b from-green-900 to-black text-white shadow-lg z-40 overflow-y-auto p-4 hidden";
     sidebar.innerHTML = `
       <h3 class="text-lg font-bold mb-4 text-green-200">Project</h3>
-      // <div id="username" class="text-sm mb-2">Cuong</div>
+      <div id="username" class="text-sm mb-2">-------</div>
       <ul id="sidebarProjectList" class="space-y-2"></ul>
     `;
     document.body.appendChild(sidebar);
@@ -530,6 +530,7 @@ function setupSidebar() {
     });
   });
 }
+
 
 
 
