@@ -486,7 +486,7 @@ function setupSidebar() {
     homeIcon = document.createElement("button");
     homeIcon.id = "homeIcon";
     homeIcon.innerHTML = "🏠";
-    homeIcon.className = "fixed top-4 left-4 z-50 text-3xl bg-white rounded-full p-2 shadow-lg hover:bg-gray-100 transition";
+    homeIcon.className = "fixed top-10 left-4 z-50 text-2xl bg-white rounded-full p-2 shadow-lg hover:bg-gray-100 transition";
     document.body.appendChild(homeIcon);
   }
 
@@ -496,7 +496,7 @@ function setupSidebar() {
     sidebar.id = "projectSidebar";
     sidebar.className = "fixed top-0 left-0 h-full w-[2cm] bg-gradient-to-b from-green-900 to-black text-white shadow-lg z-40 overflow-y-auto p-4 hidden";
     sidebar.innerHTML = `
-      <h3 class="text-lg font-bold mb-4 text-green-200">Danh sách dự án</h3>
+      <h3 class="text-lg font-bold mb-4 text-green-200">Project</h3>
       <ul id="sidebarProjectList" class="space-y-2"></ul>
     `;
     document.body.appendChild(sidebar);
@@ -528,3 +528,4 @@ function setupSidebar() {
     });
   });
 }
+
