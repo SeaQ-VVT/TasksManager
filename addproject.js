@@ -27,9 +27,10 @@ const firebaseConfig = {
   apiKey: "AIzaSyCW49METqezYoUKSC1N0Pi3J83Ptsf9hA8",
   authDomain: "task-manager-d18aa.firebaseapp.com",
   projectId: "task-manager-d18aa",
-  storageBucket: "task-manager-d18aa.appspot.com",
+  storageBucket: "task-manager-d18aa.firebasestorage.app",
   messagingSenderId: "1080268498085",
-  appId: "1:1080268498085:web:767434c6a2c013b961d94c"
+  appId: "1:1080268498085:web:767434c6a2c013b961d94c",
+  measurementId: "G-FGGV4QX67R"
 };
 
 // ===== Init Firebase =====
@@ -444,5 +445,6 @@ auth.onAuthStateChanged((user) => {
     addProjectBtn.classList.add("hidden");
   }
 });
+
 
 
