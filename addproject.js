@@ -486,7 +486,7 @@ function setupSidebar() {
     homeIcon = document.createElement("button");
     homeIcon.id = "homeIcon";
     homeIcon.innerHTML = "🏠";
-    homeIcon.className = "fixed top-0 left-4 z-50 text-3xl bg-white rounded-full p-2 shadow-lg hover:bg-gray-100 transition";
+    homeIcon.className = "fixed top-10 left-4 z-50 text-3xl bg-white rounded-full p-2 shadow-lg hover:bg-gray-100 transition";
     document.body.appendChild(homeIcon);
   }
 
@@ -535,6 +535,7 @@ function setupSidebar() {
     });
   });
 }
+
 
 
 
