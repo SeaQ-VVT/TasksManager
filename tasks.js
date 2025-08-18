@@ -527,10 +527,10 @@ function renderGroup(docSnap) {
   const g = docSnap.data();
   const gid = docSnap.id;
 
+  // ===== Group ở To Do =====
   const div = document.createElement("div");
   div.className = "border rounded p-2 bg-gray-100 shadow";
   div.id = `group-${gid}`;
-
   div.innerHTML = `
     <div class="flex justify-between items-center">
       <span class="font-semibold text-gray-800">${g.title}</span>
@@ -542,35 +542,35 @@ function renderGroup(docSnap) {
     </div>
     <div id="systems-${gid}" class="space-y-3 mt-2"></div>
   `;
-
   document.getElementById("groupContainer").appendChild(div);
 
-  // Tải các system con của group này
+  // ===== Group ở In Progress =====
+  const divIP = document.createElement("div");
+  divIP.className = "border rounded p-2 bg-gray-100 shadow";
+  divIP.id = `group-inprogress-${gid}`;
+  divIP.innerHTML = `
+    <div class="font-semibold text-yellow-600">${g.title}</div>
+    <div id="systems-inprogress-${gid}" class="space-y-3 mt-2"></div>
+  `;
+  document.getElementById("inprogressSystems").appendChild(divIP);
+
+  // ===== Group ở Done =====
+  const divDone = document.createElement("div");
+  divDone.className = "border rounded p-2 bg-gray-100 shadow";
+  divDone.id = `group-done-${gid}`;
+  divDone.innerHTML = `
+    <div class="font-semibold text-green-600">${g.title}</div>
+    <div id="systems-done-${gid}" class="space-y-3 mt-2"></div>
+  `;
+  document.getElementById("doneSystems").appendChild(divDone);
+
+  // load systems cho group
   loadSystems(gid);
 
-  // Thêm sự kiện cho các nút
+  // gắn sự kiện
   div.querySelector(".add-system").addEventListener("click", () => addSystem(gid, g.projectId));
   div.querySelector(".edit-group").addEventListener("click", () => editGroup(gid, g));
   div.querySelector(".delete-group").addEventListener("click", () => deleteGroup(gid, g));
-}
-
-// ===== Tải Systems theo thời gian thực =====
-function loadSystems(groupId) {
-  const systemsCol = collection(db, "systems");
-  const qSystems = query(systemsCol, where("groupId", "==", groupId));
-
-  onSnapshot(qSystems, (snapshot) => {
-    const systemsContainer = document.getElementById(`systems-${groupId}`);
-    if (!systemsContainer) return;
-
-    // Lọc và xóa các system cũ của group này khỏi tất cả các cột
-    const oldSystems = document.querySelectorAll(`[data-group-id="${groupId}"]`);
-    oldSystems.forEach(el => el.remove());
-
-    snapshot.forEach((docSnap) => {
-      renderSystemCards(docSnap);
-    });
-  });
 }
 
 // ===== Render System Card (tại 3 cột To Do, In Progress và Done) =====
@@ -580,40 +580,39 @@ function renderSystemCards(docSnap) {
   const groupId = s.groupId;
 
   // Render card cho cột To Do
-  const todoContainer = document.getElementById(`systems-${groupId}`);
-  if (todoContainer) {
-    const todoCard = document.createElement("div");
-    todoCard.className = "border rounded p-2 bg-gray-50 shadow";
-    todoCard.id = `system-${sid}`;
-    todoCard.draggable = true;
-    todoCard.dataset.systemId = sid;
-    todoCard.dataset.groupId = groupId;
-    todoCard.dataset.projectId = s.projectId;
-    
-    const deadlineText = s.deadline ? `<span class="text-xs text-gray-500 ml-2">⏰ ${formatDateVN(s.deadline)}</span>` : "";
+// In Progress
+const ipContainer = document.getElementById(`systems-inprogress-${groupId}`);
+if (ipContainer) {
+  const ipWrapper = document.createElement("div");
+  ipWrapper.className = "border rounded p-2 bg-gray-50 shadow";
+  ipWrapper.dataset.systemId = sid;
+  ipWrapper.dataset.groupId = groupId;
+  ipWrapper.id = `inprogress-wrapper-${sid}`;
+  ipWrapper.innerHTML = `
+    <div class="flex justify-between items-center">
+      <span class="font-semibold text-yellow-700">${s.title}</span>
+    </div>
+    <div id="inprogress-${sid}" class="space-y-1 mt-2 min-h-[30px]"></div>
+  `;
+  ipContainer.appendChild(ipWrapper);
+}
 
-    todoCard.innerHTML = `
-      <div class="flex justify-between items-center">
-        <span class="font-semibold text-blue-700">${s.title}${deadlineText}</span>
-        <div class="space-x-1">
-          <button class="add-task text-green-600 text-xs hover:text-green-700" title="Thêm Task">+</button>
-          <button class="edit-system text-yellow-600 hover:text-yellow-700" title="Sửa System">✏️</button>
-          <button class="delete-system text-red-600 hover:text-red-700" title="Xóa System">🗑️</button>
-        </div>
-      </div>
-      <div id="tasks-${sid}" class="space-y-1 mt-2 min-h-[30px]"></div>
-      
-      <div class="progress-bar-container mt-4" id="system-progress-container-${sid}">
-        <div class="flex items-center mb-1">
-          <span class="text-sm font-semibold text-gray-700 mr-2">Tiến độ system:</span>
-          <span id="system-progress-value-${sid}" class="text-sm font-medium text-blue-500">0%</span>
-        </div>
-        <div class="w-full bg-gray-200 rounded-full h-2">
-          <div id="system-progress-bar-${sid}" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%;"></div>
-        </div>
-      </div>
-    `;
-    todoContainer.appendChild(todoCard);
+// Done
+const doneContainer = document.getElementById(`systems-done-${groupId}`);
+if (doneContainer) {
+  const doneWrapper = document.createElement("div");
+  doneWrapper.className = "border rounded p-2 bg-gray-50 shadow";
+  doneWrapper.dataset.systemId = sid;
+  doneWrapper.dataset.groupId = groupId;
+  doneWrapper.id = `done-wrapper-${sid}`;
+  doneWrapper.innerHTML = `
+    <div class="flex justify-between items-center">
+      <span class="font-semibold text-green-700">${s.title}</span>
+    </div>
+    <div id="done-${sid}" class="space-y-1 mt-2 min-h-[30px]"></div>
+  `;
+  doneContainer.appendChild(doneWrapper);
+}
 
     // Thêm sự kiện cho các nút
     todoCard.querySelector(".add-task").addEventListener("click", () => openTaskModal(sid, s.groupId, s.projectId));
@@ -1025,7 +1024,7 @@ function setupDragDrop() {
       const taskId = e.dataTransfer.getData("taskId");
       if (type !== "task" || !taskId) return;
       
-      const dropTarget = e.target.closest('[data-system-id]');
+      const dropTarget = e.target.closest('[id^="inprogress-wrapper-"], [id^="done-wrapper-"]');
       if (!dropTarget) return;
 
       const newStatus = col.id === "inprogressSystems" ? "inprogress" : "done";
