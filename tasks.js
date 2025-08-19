@@ -707,11 +707,23 @@ function renderTask(docSnap) {
         const btn = document.createElement('button');
         btn.textContent = emoji;
         btn.className = 'hover:bg-gray-200 p-1 rounded';
-        btn.onclick = async () => {
-          await updateDoc(doc(db, "tasks", tid), { emoji: emoji });
-          picker.remove();
-          showToast(`Đã thêm cảm xúc "${emoji}" vào task "${t.title}"`);
-        };
+btn.onclick = async () => {
+  await updateDoc(doc(db, "tasks", tid), { emoji: emoji });
+  picker.remove();
+
+  const userDisplayName = getUserDisplayName(currentUser?.email || "Ẩn danh");
+
+  // Lấy thông tin group
+  const groupSnap = await getDoc(doc(db, "groups", t.groupId));
+  const groupData = groupSnap.exists() ? groupSnap.data() : { title: "Không rõ" };
+
+  // 🔹 Thông báo nhanh
+  showToast(`${userDisplayName} thêm ${emoji} vào "${t.title}" (Group: ${groupData.title})`);
+
+  // 🔹 Ghi vào log (giống style cũ)
+  await logAction(t.projectId, `thêm cảm xúc ${emoji} vào task "${t.title}"`, t.groupId);
+};
+
         picker.appendChild(btn);
       });
       document.body.appendChild(picker);
@@ -1004,3 +1016,4 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
