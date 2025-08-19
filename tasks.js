@@ -18,7 +18,7 @@ import {
   updateDoc,
   serverTimestamp,
   deleteField,
-  increment
+  increment // Import thêm increment
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
