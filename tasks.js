@@ -1,6 +1,6 @@
 // ========================================================================
-// === Đây là toàn bộ code đã được sửa lỗi cho file tasks.js. Bạn có    ===
-// === thể thay thế hoàn toàn file cũ của mình bằng đoạn code này.        ===
+// === Đây là toàn bộ code cho file tasks.js. Bạn có thể thay thế hoàn  ===
+// === toàn file cũ của mình bằng đoạn code này.                          ===
 // ========================================================================
 
 // ===== Firebase SDKs (vui lòng sử dụng phiên bản này để đảm bảo ổn định) =====
