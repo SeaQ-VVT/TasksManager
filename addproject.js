@@ -39,6 +39,7 @@ const db = getFirestore(app);
 
 // ===== DOM elements =====
 const projectArea = document.getElementById("projectArea");
+projectArea.className = "flex flex-wrap gap-4 justify-start";
 const addProjectBtn = document.getElementById("addProjectBtn");
 const projectModal = document.getElementById("projectModal");
 const projectModalTitle = document.getElementById("projectModalTitle");
@@ -535,6 +536,7 @@ function setupSidebar() {
     });
   });
 }
+
 
 
 
