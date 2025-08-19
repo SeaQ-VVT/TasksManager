@@ -697,8 +697,11 @@ function renderTask(docSnap) {
       const emojiList = ["👍", "🎉", "🔥", "🤔", "👀", "🚀", "❤️", "💯", "✅", "⚠️", "❌"];
       const picker = document.createElement('div');
       picker.className = 'absolute z-10 bg-white shadow-lg rounded p-2 flex flex-wrap gap-1';
-      picker.style.top = `${e.clientY + 10}px`;
-      picker.style.left = `${e.clientX}px`;
+      
+      // Lấy vị trí của nút emoji-picker-btn để đặt pop-up
+      const rect = e.target.getBoundingClientRect();
+      picker.style.top = `${rect.bottom + window.scrollY + 5}px`;
+      picker.style.left = `${rect.left + window.scrollX}px`;
       
       emojiList.forEach(emoji => {
         const btn = document.createElement('button');
