@@ -227,7 +227,7 @@ function listenForLogs(projectId) {
 // ===== Cấu hình và Helpers cho Deadline =====
 const DEADLINE_CFG = {
   thresholds: [14, 7, 3], // <=14 cam, <=7 vàng, <=3 đỏ
-  classes: ["bg-orange-100", "bg-yellow-300", "bg-red-400"],
+  classes: ["bg-orange-100", "bg-yellow-100", "bg-red-100"],
 };
 
 function daysUntil(dateStr) {
@@ -967,5 +967,6 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
