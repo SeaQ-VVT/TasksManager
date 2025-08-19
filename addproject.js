@@ -134,7 +134,9 @@ function updateCountdownAndColor(projectCard, endDate) {
   let countdownElement = projectCard.querySelector(".countdown");
   if (!countdownElement) {
     countdownElement = document.createElement("p");
-    countdownElement.className = "text-gray-800 text-3xl countdown";
+    //countdownElement.className = "text-gray-800 text-3xl countdown";
+    // Thêm các lớp để tạo nền màu xanh và chữ trắng
+    countdownElement.className = "bg-blue-500 text-white px-3 py-1 rounded-full text-lg countdown";
     projectCard.insertBefore(countdownElement, projectCard.querySelector("div.flex"));
   }
 
@@ -536,6 +538,7 @@ function setupSidebar() {
     });
   });
 }
+
 
 
 
