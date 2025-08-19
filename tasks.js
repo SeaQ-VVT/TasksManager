@@ -718,7 +718,7 @@ btn.onclick = async () => {
   const groupData = groupSnap.exists() ? groupSnap.data() : { title: "Không rõ" };
 
   // 🔹 Thông báo nhanh
-  showToast(`${userDisplayName} thêm ${emoji} vào "${t.title}" (Group: ${groupData.title})`);
+ // showToast(`${userDisplayName} thêm ${emoji} vào "${t.title}" (Group: ${groupData.title})`);
 
   // 🔹 Ghi vào log (giống style cũ)
   await logAction(t.projectId, `thêm cảm xúc ${emoji} vào task "${t.title}"`, t.groupId);
@@ -1016,4 +1016,5 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
