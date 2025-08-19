@@ -133,7 +133,7 @@ function updateCountdownAndColor(projectCard, endDate) {
   let countdownElement = projectCard.querySelector(".countdown");
   if (!countdownElement) {
     countdownElement = document.createElement("p");
-    countdownElement.className = "text-gray-500 text-sm countdown";
+    countdownElement.className = "text-gray-800 text-4xl countdown";
     projectCard.insertBefore(countdownElement, projectCard.querySelector("div.flex"));
   }
 
@@ -535,6 +535,7 @@ function setupSidebar() {
     });
   });
 }
+
 
 
 
