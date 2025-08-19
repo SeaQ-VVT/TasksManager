@@ -17,7 +17,7 @@ import {
   deleteDoc,
   updateDoc,
   serverTimestamp,
-  increment
+  deleteField
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
@@ -28,180 +28,902 @@ const firebaseConfig = {
   authDomain: "task-806e4.firebaseapp.com",
   projectId: "task-806e4",
   storageBucket: "task-806e4.firebasestorage.app",
-  messagingSenderId: "6...",
+  messagingSenderId: "638366751634",
+  appId: "1:638366751634:web:1cff140df54007edecff4b",
+  measurementId: "G-TLJSXWQBZD"
 };
 
-// Khởi tạo Firebase và các services
+// ===== Khởi tạo Firebase =====
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// Biến toàn cục
+// Biến lưu trữ người dùng hiện tại và trạng thái đăng nhập
 let currentUser = null;
 let isAuthReady = false;
-let logsUnsub;
-let progressUnsub;
-let groupsUnsub;
-let taskboardUnsubs = {};
 
-// ===== Helper Functions =====
-const showToast = (message) => {
-  const toast = document.getElementById('toast');
-  if (toast) {
-    toast.textContent = message;
-    toast.className = 'toast show';
-    setTimeout(() => {
-      toast.className = 'toast';
-    }, 3000);
-  }
-};
+// Đảm bảo các hoạt động Firestore chỉ chạy sau khi xác thực xong
+onAuthStateChanged(auth, (user) => {
+  currentUser = user;
+  isAuthReady = true;
+});
 
-const openModal = (title, formHtml, onFormSubmit) => {
-  const modal = document.getElementById('myModal');
-  const modalTitle = document.getElementById('modalTitle');
-  const modalBody = document.getElementById('modalBody');
-
-  if (!modal || !modalTitle || !modalBody) return;
-
-  modalTitle.textContent = title;
-  modalBody.innerHTML = formHtml;
-  modal.style.display = 'block';
-
-  const form = modalBody.querySelector('form');
-  if (form) {
-    form.onsubmit = (e) => {
-      e.preventDefault();
-      onFormSubmit(form);
-      modal.style.display = 'none';
-    };
+// ===== Helper cho Modal (Popup) =====
+function openModal(title, fields, onSave) {
+  let modal = document.getElementById("popupModal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "popupModal";
+    modal.className = "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden";
+    modal.innerHTML = `
+      <div class="bg-white rounded-lg p-4 w-96 shadow-lg">
+        <h3 id="modalTitle" class="font-semibold text-lg mb-2"></h3>
+        <div id="modalFields" class="space-y-2"></div>
+        <div class="flex justify-end space-x-2 mt-4">
+          <button id="modalCancel" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors">Hủy</button>
+          <button id="modalSave" class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors">Lưu</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
   }
 
-  const closeBtn = document.querySelector('.modal .close');
-  if (closeBtn) {
-    closeBtn.onclick = () => {
-      modal.style.display = 'none';
-    };
-  }
-
-  window.onclick = (e) => {
-    if (e.target == modal) {
-      modal.style.display = 'none';
+  document.getElementById("modalTitle").textContent = title;
+  const fieldsDiv = document.getElementById("modalFields");
+  fieldsDiv.innerHTML = "";
+  fields.forEach(f => {
+    if (f.type === "textarea") {
+      fieldsDiv.innerHTML += `<textarea id="${f.id}" placeholder="${f.placeholder}" class="border p-2 w-full rounded-md">${f.value || ""}</textarea>`;
+    } else if (f.type === "color") {
+      fieldsDiv.innerHTML += `
+        <div class="flex items-center space-x-2">
+          <label for="${f.id}" class="text-gray-700 w-20">Màu:</label>
+          <input id="${f.id}" type="color" class="border p-1 w-full rounded-md" value="${f.value || "#000000"}">
+        </div>`;
+    } else if (f.type === "range") {
+      fieldsDiv.innerHTML += `
+        <div class="flex flex-col">
+          <label for="${f.id}" class="text-gray-700">Tiến độ (<span id="progress-value-${f.id}">${f.value || 0}</span>%)</label>
+          <input id="${f.id}" type="range" min="0" max="100" value="${f.value || 0}" class="w-full">
+        </div>`;
+    } else if (f.type === "date") {
+      fieldsDiv.innerHTML += `
+        <div class="flex flex-col">
+          <label for="${f.id}" class="text-gray-700">${f.label || 'Hạn Chót'}:</label>
+          <input id="${f.id}" type="date" class="border p-2 w-full rounded-md" value="${f.value || ""}">
+        </div>`;
+    } else {
+      fieldsDiv.innerHTML += `<input id="${f.id}" type="text" placeholder="${f.placeholder}" class="border p-2 w-full rounded-md" value="${f.value || ""}">`;
     }
-  };
-};
-
-const logAction = async (projectId, message) => {
-  await addDoc(collection(db, `projects/${projectId}/logs`), {
-    message: message,
-    timestamp: serverTimestamp(),
-    user: currentUser?.email || "Ẩn danh",
   });
-};
 
-const calculateGroupProgress = (tasks) => {
-  if (tasks.length === 0) return 0;
-  const doneTasks = tasks.filter(task => task.status === 'done').length;
-  return Math.round((doneTasks / tasks.length) * 100);
-};
+  modal.classList.remove("hidden");
 
-// ===== Main Functions =====
-export const showTaskBoard = (projectId, projectTitle) => {
-  if (!isAuthReady) return;
-
-  // Hủy các listener cũ nếu có
-  if (logsUnsub) logsUnsub();
-  if (progressUnsub) progressUnsub();
-  if (groupsUnsub) groupsUnsub();
-  for (const unsub of Object.values(taskboardUnsubs)) {
-    if (unsub) unsub();
+  const progressInput = document.getElementById("progress");
+  if (progressInput) {
+    const progressValueSpan = document.getElementById("progress-value-progress");
+    progressInput.addEventListener("input", (e) => {
+      progressValueSpan.textContent = e.target.value;
+    });
   }
-  taskboardUnsubs = {};
 
-  const appContent = document.getElementById('appContent');
-  if (!appContent) return;
+  document.getElementById("modalCancel").onclick = () => modal.classList.add("hidden");
+  document.getElementById("modalSave").onclick = () => {
+    const values = {};
+    fields.forEach(f => values[f.id] = document.getElementById(f.id).value);
+    onSave(values);
+    modal.classList.add("hidden");
+  };
+}
 
-  appContent.innerHTML = `
-    <div class="container mx-auto p-4">
-      <div class="flex justify-between items-center mb-6">
-        <h1 id="projectTitle" class="text-3xl font-bold text-gray-800">${projectTitle}</h1>
-        <button id="btnBackToProjects" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full shadow-lg transition-transform duration-200 transform hover:scale-105">
-          <i class="fas fa-arrow-left mr-2"></i> Quay lại
-        </button>
+// ===== Các hàm tiện ích chung =====
+function getUserDisplayName(email) {
+  if (!email) return "Ẩn danh";
+  return email.split('@')[0];
+}
+
+function showToast(message) {
+  let toastContainer = document.getElementById("toastContainer");
+  if (!toastContainer) {
+    toastContainer = document.createElement("div");
+    toastContainer.id = "toastContainer";
+    toastContainer.className = "fixed bottom-4 right-4 z-50 flex flex-col-reverse space-y-2";
+    document.body.appendChild(toastContainer);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = "bg-blue-600 text-white px-4 py-2 rounded-lg shadow-xl animate-fade-in-up transition-opacity duration-500 ease-in-out";
+  toast.textContent = message;
+
+  const style = document.createElement("style");
+  style.innerHTML = `
+    @keyframes fadeInUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .animate-fade-in-up { animation: fadeInUp 0.5s ease-in-out; }`;
+  document.head.appendChild(style);
+
+  toastContainer.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 500);
+  }, 5000);
+}
+
+function formatDateVN(yyyy_mm_dd) {
+  if (!yyyy_mm_dd) return "";
+  const [y, m, d] = yyyy_mm_dd.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+// ===== Nhật ký hoạt động (Logs) =====
+async function logAction(projectId, action, groupId = null) {
+  if (!isAuthReady) return; // Đảm bảo người dùng đã xác thực
+
+  const user = currentUser?.email || "Ẩn danh";
+  let logMessage = action;
+
+  // Lấy thông tin group nếu có
+  if (groupId) {
+    const groupSnap = await getDoc(doc(db, "groups", groupId));
+    if (groupSnap.exists()) {
+      const groupData = groupSnap.data();
+      logMessage += ` trong group "${groupData.title}"`;
+    }
+  }
+
+  await addDoc(collection(db, "logs"), {
+    projectId,
+    action: logMessage,
+    user,
+    timestamp: serverTimestamp()
+  });
+}
+
+// Biến lưu trữ listener logs để có thể hủy khi đổi dự án
+let logsUnsub = null;
+
+function listenForLogs(projectId) {
+  // Hủy listener cũ để không bị nhận thông báo từ dự án khác
+  if (logsUnsub) {
+    logsUnsub();
+    logsUnsub = null;
+  }
+
+  const logsCol = collection(db, "logs");
+  const q = query(logsCol, where("projectId", "==", projectId));
+
+  let initial = true;
+
+  logsUnsub = onSnapshot(q, (snapshot) => {
+    const logEntries = document.getElementById("logEntries");
+    if (logEntries) {
+      const logs = [];
+      snapshot.forEach((doc) => logs.push(doc.data()));
+      logs.sort((a, b) => b.timestamp - a.timestamp);
+
+      logEntries.innerHTML = "";
+      logs.forEach((data) => {
+        const timestamp = data.timestamp?.toDate ? data.timestamp.toDate().toLocaleString() : "-";
+        const userDisplayName = getUserDisplayName(data.user);
+        const logItem = document.createElement("div");
+        logItem.textContent = `[${timestamp}] ${userDisplayName} đã ${data.action}.`;
+        logEntries.appendChild(logItem);
+      });
+    }
+
+    if (initial) {
+      initial = false;
+      return;
+    }
+
+    snapshot.docChanges().forEach((change) => {
+      if (change.type === "added") {
+        const data = change.doc.data();
+        const userDisplayName = getUserDisplayName(data.user);
+        showToast(`${userDisplayName} đã ${data.action}.`);
+      }
+    });
+  });
+}
+
+// ===== Cấu hình và Helpers cho Deadline =====
+const DEADLINE_CFG = {
+  thresholds: [14, 7, 3], // <=14 cam, <=7 vàng, <=3 đỏ
+  classes: ["bg-orange-100", "bg-yellow-300", "bg-red-400"],
+};
+
+function daysUntil(dateStr) {
+  if (!dateStr) return Infinity;
+  const today = new Date();
+  const d = new Date(dateStr + "T23:59:59");
+  return Math.floor((d - today) / (1000 * 60 * 60 * 24));
+}
+
+function colorClassByDaysLeft(days, cfg = DEADLINE_CFG) {
+  const { thresholds, classes } = cfg;
+  for (let i = thresholds.length - 1; i >= 0; i--) {
+    if (days <= thresholds[i]) return classes[i];
+  }
+  return "";
+}
+
+function getGroupWarnClass(g) {
+  if (!g || !g.deadline) return "";
+  const left = daysUntil(g.deadline);
+  if (g.status === "todo" || g.status === "inprogress") {
+    return colorClassByDaysLeft(left);
+  }
+  return "";
+}
+
+function removeWarnClasses(el) {
+  if (!el) return;
+  [...el.classList].forEach(c => {
+    if (c.startsWith("bg-")) el.classList.remove(c);
+  });
+}
+
+function applyGroupColor(gid, g) {
+  const cls = getGroupWarnClass(g);
+
+  // Thẻ Group (To Do)
+  const todoCard = document.getElementById(`group-${gid}`);
+  if (todoCard) {
+    removeWarnClasses(todoCard);
+    if (g.status === "todo" && cls) {
+      todoCard.classList.add(...cls.split(" "));
+    }
+  }
+
+  // Khung In Progress
+  const ipWrapper = document.getElementById(`inprogress-${gid}`)?.parentElement;
+  if (ipWrapper) {
+    removeWarnClasses(ipWrapper);
+    if (g.status === "inprogress" && cls) {
+      ipWrapper.classList.add(...cls.split(" "));
+    }
+  }
+
+  // Khung Done (luôn bỏ cảnh báo)
+  const doneWrapper = document.getElementById(`done-${gid}`)?.parentElement;
+  if (doneWrapper) removeWarnClasses(doneWrapper);
+}
+
+// ===== Render Bảng Công Việc (Project View) =====
+// Đây là hàm chính để hiển thị giao diện bảng công việc
+// Nó nhận projectId, do đó mỗi lần gọi sẽ chỉ hiển thị đúng dự án đó
+export function showTaskBoard(projectId, projectTitle) {
+  const taskBoard = document.getElementById("taskBoard");
+
+  taskBoard.innerHTML = `
+    <h2 class="text-xl font-bold mb-4">Bạn đang ở dự án: ${projectTitle}</h2>
+
+    <div id="logArea" class="mt-4 bg-gray-100 p-4 rounded-lg">
+      <div class="flex justify-between items-center mb-2">
+        <h4 class="font-semibold text-gray-700">Nhật ký hoạt động</h4>
+        <button id="toggleLogBtn" class="bg-gray-300 text-gray-700 px-2 py-1 rounded text-xs hover:bg-gray-400 transition-colors">Hiện log</button>
       </div>
+      <div id="logEntries" class="space-y-2 text-sm text-gray-600 hidden"></div>
+    </div>
 
-      <!-- Biểu đồ tiến độ dự án -->
-      <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
-        <h2 class="text-xl font-semibold text-gray-700 mb-4">Tiến độ Dự án</h2>
-        <canvas id="projectProgressChart"></canvas>
+    <!-- Cập nhật lớp Tailwind cho các cột để có cùng chiều cao và thanh cuộn -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 w-full mt-4">
+      <!-- Cột To Do -->
+      <div class="bg-white p-3 rounded-2xl shadow flex flex-col border-4 border-teal-200">
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="font-bold text-red-600">To Do</h3>
+          <button id="addGroupBtn" class="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600 transition-colors">
+            + Group
+          </button>
+        </div>
+        <!-- Thêm chiều cao cố định và thanh cuộn cho group container -->
+        <div id="groupContainer" class="space-y-3 mt-2 h-[30cm] overflow-y-auto"></div>
       </div>
-
-      <!-- Log hoạt động -->
-      <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
-        <h2 class="text-xl font-semibold text-gray-700 mb-4">Hoạt động Gần đây</h2>
-        <ul id="logList" class="space-y-2">
-          <!-- Logs sẽ được thêm vào đây -->
-        </ul>
+      <!-- Cột In Progress -->
+      <div class="bg-white p-3 rounded-2xl shadow flex flex-col border-4 border-blue-200">
+        <h3 class="font-bold text-yellow-600 mb-2">In Progress</h3>
+        <!-- Thêm chiều cao cố định và thanh cuộn cho cột In Progress -->
+        <div id="inprogressCol" class="space-y-3 mt-2 h-[30cm] overflow-y-auto"></div>
       </div>
+      <!-- Cột Done -->
+      <div class="bg-white p-3 rounded-2xl shadow flex flex-col border-4 border-green-400">
+        <h3 class="font-bold text-green-600 mb-2">Done</h3>
+        <!-- Thêm chiều cao cố định và thanh cuộn cho cột Done -->
+        <div id="doneCol" class="space-y-3 mt-2 h-[30cm] overflow-y-auto"></div>
+      </div>
+    </div>
 
-      <!-- Bảng Task Kanban -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <!-- Cột To Do -->
-        <div id="todoCol" class="bg-gray-100 rounded-xl p-4 shadow-md h-full min-h-[500px]">
-          <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-bold text-gray-700">TO DO</h2>
-            <button id="btnNewGroup" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded-full text-sm shadow transition-transform duration-200 transform hover:scale-110">
-              <i class="fas fa-plus mr-1"></i> Nhóm
-            </button>
-          </div>
-          <div id="groupsContainer" class="space-y-4">
-            <!-- Groups sẽ được render vào đây -->
-          </div>
-        </div>
+    <!-- Biểu đồ tổng tiến độ dự án -->
+    <div id="project-progress-chart-container" class="mt-8 bg-white p-4 rounded shadow">
+        <h3 class="font-bold text-gray-800 mb-2">Tiến độ tổng thể dự án</h3>
+        <canvas id="project-progress-chart" class="w-full h-64"></canvas>
+    </div>
+  `;
 
-        <!-- Cột In Progress -->
-        <div id="inprogressCol" class="bg-gray-100 rounded-xl p-4 shadow-md h-full min-h-[500px] drag-zone">
-          <h2 class="text-xl font-bold text-gray-700 mb-4">IN PROGRESS</h2>
-          <!-- Tasks sẽ được kéo vào đây -->
-        </div>
+  // Thêm Chart.js CDN
+  const chartJsScript = document.createElement("script");
+  chartJsScript.src = "https://cdn.jsdelivr.net/npm/chart.js";
+  document.head.appendChild(chartJsScript);
+  
+  // Sửa lỗi biểu đồ kéo dài
+  const style = document.createElement("style");
+  style.textContent = `
+    #project-progress-chart-container {
+      width: 100%;
+      max-width: 100%;
+      height: 300px;
+    }
+  `;
+  document.head.appendChild(style);
 
-        <!-- Cột Done -->
-        <div id="doneCol" class="bg-gray-100 rounded-xl p-4 shadow-md h-full min-h-[500px] drag-zone">
-          <h2 class="text-xl font-bold text-gray-700 mb-4">DONE</h2>
-          <!-- Tasks sẽ được kéo vào đây -->
+  document.getElementById("toggleLogBtn").addEventListener("click", () => {
+    const logEntries = document.getElementById("logEntries");
+    const button = document.getElementById("toggleLogBtn");
+    if (logEntries.classList.contains("hidden")) {
+      logEntries.classList.remove("hidden");
+      button.textContent = "Ẩn log";
+    } else {
+      logEntries.classList.add("hidden");
+      button.textContent = "Hiện log";
+    }
+  });
+
+  // Gọi các hàm tải dữ liệu và thiết lập listener với projectId cụ thể
+  loadGroups(projectId);
+  setupGroupListeners(projectId);
+  setupDragDrop();
+  listenForLogs(projectId);
+  listenForProjectProgress(projectId); // Thêm listener cho tiến độ tổng dự án
+}
+
+// ===== Biểu đồ tổng tiến độ dự án =====
+let projectChart = null;
+let progressUnsub = null; // Thêm biến để lưu listener của biểu đồ
+
+function listenForProjectProgress(projectId) {
+    // Hủy listener cũ để tránh lỗi dữ liệu
+    if (progressUnsub) {
+        progressUnsub();
+        progressUnsub = null;
+    }
+
+    // Hủy biểu đồ cũ để tránh lỗi
+    if (projectChart) {
+      projectChart.destroy();
+      projectChart = null;
+    }
+
+    // Lắng nghe dữ liệu lịch sử tiến độ từ Firestore
+    const historyCol = collection(db, "progress_history");
+    const qHistory = query(historyCol, where("projectId", "==", projectId));
+    
+    progressUnsub = onSnapshot(qHistory, (snapshot) => {
+        let projectHistory = [];
+        snapshot.forEach(doc => {
+            projectHistory.push(doc.data());
+        });
+        
+        projectHistory.sort((a, b) => {
+            // Sắp xếp theo timestamp, kiểm tra tính hợp lệ của đối tượng timestamp
+            const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(0);
+            const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(0);
+            return dateA - dateB;
+        });
+        
+        updateProjectChart(projectHistory);
+    });
+
+    // Lắng nghe thay đổi tiến độ của các task và cập nhật lịch sử
+    const tasksCol = collection(db, "tasks");
+    const qTasks = query(tasksCol, where("projectId", "==", projectId));
+
+    onSnapshot(qTasks, async (snapshot) => {
+        let totalProgress = 0;
+        let totalTasks = 0;
+        snapshot.forEach(doc => {
+            const task = doc.data();
+            totalProgress += task.progress || 0;
+            totalTasks++;
+        });
+
+        const currentProgress = totalTasks > 0 ? Math.round(totalProgress / totalTasks) : 0;
+        
+        // Ghi lại tiến độ vào Firestore
+        await addDoc(collection(db, "progress_history"), {
+            projectId,
+            progress: currentProgress,
+            timestamp: serverTimestamp()
+        });
+    });
+}
+
+function updateProjectChart(projectHistory) {
+    const ctx = document.getElementById('project-progress-chart').getContext('2d');
+    
+    const labels = projectHistory.map(h => {
+        // Kiểm tra đối tượng timestamp trước khi gọi toDate()
+        const date = h.timestamp?.toDate ? h.timestamp.toDate() : new Date();
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+    });
+    const data = projectHistory.map(h => h.progress);
+    
+    if (projectChart) {
+        projectChart.data.labels = labels;
+        projectChart.data.datasets[0].data = data;
+        projectChart.update();
+    } else {
+        projectChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Tiến độ dự án',
+                    data: data,
+                    borderColor: 'rgb(59, 130, 246)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Tiến độ (%)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Thời gian'
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+
+// ===== Tải Groups theo thời gian thực (Realtime Groups) =====
+// Tải các group có projectId khớp với projectId hiện tại
+// Đây là logic quan trọng để đảm bảo dữ liệu không bị trộn lẫn
+let groupsUnsub = null; // Biến lưu listener để có thể hủy khi đổi dự án
+function loadGroups(projectId) {
+  // Hủy listener cũ trước khi tạo listener mới
+  if (groupsUnsub) {
+    groupsUnsub();
+    groupsUnsub = null;
+  }
+
+  const groupsCol = collection(db, "groups");
+  const qGroups = query(groupsCol, where("projectId", "==", projectId));
+
+  groupsUnsub = onSnapshot(qGroups, (snapshot) => {
+    const groupContainer = document.getElementById("groupContainer");
+    const inprogressCol = document.getElementById("inprogressCol");
+    const doneCol = document.getElementById("doneCol");
+
+    // Xóa toàn bộ nội dung cũ để render lại từ đầu
+    groupContainer.innerHTML = "";
+    inprogressCol.innerHTML = "";
+    doneCol.innerHTML = "";
+
+    snapshot.forEach((docSnap) => {
+      const gid = docSnap.id;
+      const g = docSnap.data();
+
+      // Hiển thị phần "In Progress"
+      const ipSection = document.createElement("div");
+      ipSection.className = "border rounded p-2 bg-gray-50 shadow";
+      ipSection.innerHTML = `
+        <div class="flex justify-between items-center">
+          <span class="font-semibold text-yellow-700">${g.title}</span>
         </div>
+        <div id="inprogress-${gid}" class="space-y-1 mt-2 min-h-[30px]"></div>
+      `;
+      inprogressCol.appendChild(ipSection);
+
+      // Hiển thị phần "Done"
+      const doneSection = document.createElement("div");
+      doneSection.className = "border rounded p-2 bg-gray-50 shadow";
+      doneSection.innerHTML = `
+        <div class="flex justify-between items-center">
+          <span class="font-semibold text-green-700">${g.title}</span>
+        </div>
+        <div id="done-${gid}" class="space-y-1 mt-2 min-h-[30px]"></div>
+      `;
+      doneCol.appendChild(doneSection);
+
+      // Hiển thị thẻ Group ở cột To Do
+      renderGroup(docSnap);
+
+      // Áp màu cảnh báo dựa trên deadline và trạng thái
+      applyGroupColor(gid, g);
+    });
+  });
+}
+
+// ===== Render Group (Cột To Do) =====
+function renderGroup(docSnap) {
+  const g = docSnap.data();
+  const gid = docSnap.id;
+
+  const div = document.createElement("div");
+  div.className = "border rounded p-2 bg-gray-50 shadow";
+  div.id = `group-${gid}`;
+
+  const deadlineText = g.deadline ? `<span class="text-xs text-gray-500 ml-2">⏰ ${formatDateVN(g.deadline)}</span>` : "";
+
+  div.innerHTML = `
+    <div class="flex justify-between items-center">
+      <span class="font-semibold text-blue-700">${g.title}${deadlineText}</span>
+      <div class="space-x-1">
+        <button class="edit-group text-yellow-600 hover:text-yellow-700" title="Sửa group">✏️</button>
+        <button class="delete-group text-red-600 hover:text-red-700" title="Xóa group">🗑️</button>
+      </div>
+    </div>
+    <button class="add-task text-green-600 text-xs mt-1 hover:text-green-700">+ Task</button>
+    <div id="tasks-${gid}" class="space-y-1 mt-2"></div>
+    
+    <!-- Biểu đồ tiến độ nhóm (Luôn hiển thị) -->
+    <div class="progress-bar-container mt-4" id="group-progress-container-${gid}">
+      <div class="flex items-center mb-1">
+        <span class="text-sm font-semibold text-gray-700 mr-2">Tiến độ nhóm:</span>
+        <span id="group-progress-value-${gid}" class="text-sm font-medium text-blue-500">0%</span>
+      </div>
+      <div class="w-full bg-gray-200 rounded-full h-2">
+        <div id="group-progress-bar-${gid}" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%;"></div>
       </div>
     </div>
   `;
 
-  // Xử lý nút quay lại
-  document.getElementById('btnBackToProjects').addEventListener('click', () => {
-    // Hủy các listener trước khi chuyển trang
-    if (logsUnsub) logsUnsub();
-    if (progressUnsub) progressUnsub();
-    if (groupsUnsub) groupsUnsub();
-    for (const unsub of Object.values(taskboardUnsubs)) {
-      if (unsub) unsub();
+  document.getElementById("groupContainer").appendChild(div);
+
+  // Tải các task con của group này
+  loadTasks(gid);
+
+  // Thêm sự kiện cho các nút
+  div.querySelector(".add-task").addEventListener("click", () => openTaskModal(gid, g.projectId));
+  div.querySelector(".edit-group").addEventListener("click", () => editGroup(gid, g));
+  div.querySelector(".delete-group").addEventListener("click", () => deleteGroup(gid, g));
+}
+
+// ===== Tải Tasks theo thời gian thực (Realtime Tasks) =====
+// Tải các task có groupId khớp với groupId hiện tại
+function loadTasks(groupId) {
+  const tasksCol = collection(db, "tasks");
+  const qTasks = query(tasksCol, where("groupId", "==", groupId));
+
+  onSnapshot(qTasks, async (snapshot) => {
+    const tasks = [];
+    let totalProgress = 0;
+    
+    snapshot.forEach((d) => {
+      const taskData = d.data();
+      tasks.push({ id: d.id, ...taskData });
+      totalProgress += taskData.progress || 0;
+    });
+    
+    const groupProgress = tasks.length > 0 ? Math.round(totalProgress / tasks.length) : 0;
+    
+    // Cập nhật biểu đồ tiến độ nhóm
+    const groupProgressBar = document.getElementById(`group-progress-bar-${groupId}`);
+    const groupProgressValue = document.getElementById(`group-progress-value-${groupId}`);
+    
+    if (groupProgressBar && groupProgressValue) {
+      groupProgressBar.style.width = `${groupProgress}%`;
+      groupProgressValue.textContent = `${groupProgress}%`;
     }
-    window.location.hash = '';
+
+    // Duyệt qua các thay đổi để cập nhật giao diện
+    snapshot.docChanges().forEach((change) => {
+      const docSnap = change.doc;
+      const tid = docSnap.id;
+
+      const oldElement = document.getElementById(`task-${tid}`);
+      if (oldElement) oldElement.remove();
+
+      if (change.type === "added" || change.type === "modified") {
+        renderTask(docSnap);
+      }
+    });
+
+    // Cập nhật trạng thái của Group dựa trên trạng thái của các Task
+    let newStatus = "todo";
+    const hasAny = tasks.length > 0;
+    if (hasAny && tasks.some(t => t.status === "inprogress")) newStatus = "inprogress";
+    else if (hasAny && tasks.every(t => t.status === "done")) newStatus = "done";
+
+    const gRef = doc(db, "groups", groupId);
+    const gSnap = await getDoc(gRef);
+    const gData = gSnap.exists() ? gSnap.data() : {};
+
+    if (gData.status !== newStatus) {
+      await updateDoc(gRef, { status: newStatus, updatedAt: serverTimestamp() });
+    }
+
+    // Áp dụng lại màu cảnh báo sau khi trạng thái thay đổi
+    applyGroupColor(groupId, { ...gData, status: newStatus });
   });
+}
 
-  const todoCol = document.getElementById('todoCol');
-  const inprogressCol = document.getElementById('inprogressCol');
-  const doneCol = document.getElementById('doneCol');
+// ===== Render task row (từng thẻ task) =====
+function renderTask(docSnap) {
+  const t = docSnap.data();
+  const tid = docSnap.id;
 
-  // Đăng ký sự kiện kéo và thả
-  const dragZones = [inprogressCol, doneCol];
-  dragZones.forEach(col => {
-    col.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      col.classList.add('border-indigo-400');
+  // Xác định cột để đặt task dựa trên trạng thái của nó
+  let colId;
+  if (t.status === "todo") colId = `tasks-${t.groupId}`;
+  else if (t.status === "inprogress") colId = `inprogress-${t.groupId}`;
+  else if (t.status === "done") colId = `done-${t.groupId}`;
+
+  const col = document.getElementById(colId);
+  if (!col) return;
+
+  let row = document.getElementById(`task-${tid}`);
+  if (!row) {
+    row = document.createElement("div");
+    row.id = `task-${tid}`;
+    row.className = "flex flex-col bg-gray-100 p-2 rounded-md text-sm cursor-move shadow-sm hover:shadow transition-shadow";
+    row.style.borderLeft = `4px solid ${t.color || '#e5e7eb'}`;
+    row.draggable = true;
+
+    row.innerHTML = `
+      <div class="flex justify-between items-center w-full">
+        <span class="truncate font-medium">${t.title}</span>
+        <div class="space-x-1 flex-shrink-0">
+          <button class="edit-task text-yellow-600 hover:text-yellow-700" title="Sửa">✏️</button>
+          <button class="comment-task text-gray-400 hover:text-blue-600" title="Comment">💬</button>
+          <button class="delete-task text-red-600 hover:text-red-700" title="Xóa">🗑️</button>
+        </div>
+      </div>
+      <div id="task-info-${tid}" class="flex items-center text-xs text-gray-500 mt-1">
+          <!-- Task Deadline sẽ được thêm vào đây -->
+      </div>
+      <div id="progress-container-${tid}" class="mt-1 w-full bg-gray-200 rounded-full h-2">
+        <div class="bg-green-600 h-2 rounded-full transition-all duration-300" style="width: ${t.progress || 0}%;"></div>
+      </div>`;
+
+    col.appendChild(row);
+
+    // Sự kiện kéo thả
+    row.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("type", "task");
+      e.dataTransfer.setData("taskId", tid);
     });
-    col.addEventListener('dragleave', () => {
-      col.classList.remove('border-indigo-400');
+
+    // Sự kiện click nút sửa
+    row.querySelector(".edit-task").addEventListener("click", () => {
+      openModal("Sửa Task", [
+        { id: "title", placeholder: "Task title", type: "text", value: t.title },
+        { id: "progress", label: "Tiến độ", type: "range", value: t.progress || 0 },
+        { id: "deadline", label: "Hạn chót", type: "date", value: t.deadline || "" }, // Thêm trường deadline
+        { id: "color", label: "Màu", type: "color", value: t.color || "#e5e7eb" }
+      ], async (vals) => {
+        const oldTitle = t.title;
+        const oldProgress = t.progress;
+        const oldDeadline = t.deadline || null;
+        const newDeadline = (vals.deadline && vals.deadline.trim()) ? vals.deadline.trim() : null;
+
+        const updatePayload = {
+            title: vals.title,
+            color: vals.color,
+            progress: parseInt(vals.progress),
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser?.email || "Ẩn danh",
+        };
+        // Cập nhật deadline nếu có
+        if (newDeadline) {
+            updatePayload.deadline = newDeadline;
+        } else {
+            updatePayload.deadline = deleteField();
+        }
+
+        await updateDoc(doc(db, "tasks", tid), updatePayload);
+
+        if (oldTitle !== vals.title) {
+          await logAction(t.projectId, `cập nhật task "${oldTitle}" thành "${vals.title}"`, t.groupId);
+        }
+        if (oldProgress !== parseInt(vals.progress)) {
+          await logAction(t.projectId, `cập nhật tiến độ task "${vals.title}" từ ${oldProgress || 0}% lên ${parseInt(vals.progress)}%`, t.groupId);
+        }
+        if (!oldDeadline && newDeadline) {
+            await logAction(t.projectId, `đặt deadline cho task "${vals.title}" là ${formatDateVN(newDeadline)}`, t.groupId);
+        } else if (oldDeadline && newDeadline && oldDeadline !== newDeadline) {
+            await logAction(t.projectId, `đổi deadline task "${vals.title}" từ ${formatDateVN(oldDeadline)} sang ${formatDateVN(newDeadline)}`, t.groupId);
+        } else if (oldDeadline && !newDeadline) {
+            await logAction(t.projectId, `xóa deadline của task "${vals.title}"`, t.groupId);
+        }
+      });
     });
-    col.addEventListener('drop', async (e) => {
+
+    // Sự kiện click nút comment
+    row.querySelector(".comment-task").addEventListener("click", () => {
+      openModal("Comment Task", [
+        { id: "comment", placeholder: "Nhập comment", type: "textarea", value: t.comment || "" }
+      ], async (vals) => {
+        if (vals.comment && vals.comment.trim().length > 0) {
+          await updateDoc(doc(db, "tasks", tid), {
+            comment: vals.comment.trim(),
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser?.email || "Ẩn danh"
+          });
+          await logAction(t.projectId, `thêm comment vào task "${t.title}"`, t.groupId);
+        } else {
+          await updateDoc(doc(db, "tasks", tid), {
+            comment: deleteField(),
+            updatedAt: serverTimestamp(),
+            updatedBy: currentUser?.email || "Ẩn danh"
+          });
+          await logAction(t.projectId, `xóa comment của task "${t.title}"`, t.groupId);
+        }
+      });
+    });
+
+    // Sự kiện click nút xóa
+    row.querySelector(".delete-task").addEventListener("click", async () => {
+      if (confirm("Bạn có chắc muốn xóa task này?")) {
+        await deleteDoc(doc(db, "tasks", tid));
+        await logAction(t.projectId, `xóa task "${t.title}"`, t.groupId);
+      }
+    });
+  }
+
+  // Cập nhật trạng thái nút comment, thanh tiến độ và deadline
+  const hasComment = t.comment && t.comment.trim().length > 0;
+  const commentBtn = row.querySelector(".comment-task");
+  if (hasComment) {
+    commentBtn.classList.add("text-blue-600", "font-bold");
+  } else {
+    commentBtn.classList.remove("text-blue-600", "font-bold");
+  }
+
+  const progressBar = row.querySelector(`#progress-container-${tid} div`);
+  if (progressBar) {
+    progressBar.style.width = `${t.progress || 0}%`;
+  }
+
+  // Thêm class màu nền cho task nếu có deadline gần kề
+if (t.deadline) {
+    const daysLeft = daysUntil(t.deadline);
+    const deadlineClass = colorClassByDaysLeft(daysLeft);
+
+    // luôn bỏ màu trước khi xử lý
+    row.classList.remove("bg-red-100", "bg-yellow-200", "bg-orange-300");
+
+    // 🚫 Không áp màu nếu task đã Done
+    if (deadlineClass && t.status !== "done") {
+        row.classList.add(deadlineClass);
+    }
+} else {
+    row.classList.remove("bg-red-100", "bg-yellow-200", "bg-orange-300");
+}
+
+
+  const taskInfo = row.querySelector(`#task-info-${tid}`);
+  if (taskInfo) {
+      taskInfo.innerHTML = '';
+      if (t.deadline) {
+          const deadlineSpan = document.createElement('span');
+          deadlineSpan.className = "ml-1 text-gray-700";
+          deadlineSpan.innerHTML = `⏰ ${formatDateVN(t.deadline)}`;
+          taskInfo.appendChild(deadlineSpan);
+      }
+  }
+}
+
+// ===== Group CRUD (Thêm/Sửa/Xóa) =====
+async function addGroup(projectId) {
+  openModal("Thêm Group", [
+    { id: "title", placeholder: "Tên Group" },
+    { id: "deadline", placeholder: "Deadline", type: "date" }
+  ], async (vals) => {
+    if (!isAuthReady) return;
+    const deadline = vals.deadline && vals.deadline.trim() ? vals.deadline.trim() : null;
+    const newDocRef = await addDoc(collection(db, "groups"), {
+      title: vals.title,
+      projectId,
+      status: "todo",
+      deadline,
+      createdAt: serverTimestamp(),
+      createdBy: currentUser?.email || "Ẩn danh"
+    });
+
+    await logAction(projectId,
+      `thêm group mới "${vals.title}"` +
+      (deadline ? ` (deadline ${formatDateVN(deadline)})` : ``), newDocRef.id
+    );
+  });
+}
+
+async function editGroup(groupId, g) {
+  openModal("Sửa Group", [
+    { id: "title", placeholder: "Tên", value: g.title },
+    { id: "deadline", placeholder: "Deadline", type: "date", value: g.deadline || "" }
+  ], async (vals) => {
+    if (!isAuthReady) return;
+    const oldDeadline = g.deadline || null;
+    const newDeadline = (vals.deadline && vals.deadline.trim()) ? vals.deadline.trim() : null;
+
+    const payload = {
+      title: vals.title,
+      updatedAt: serverTimestamp(),
+      updatedBy: currentUser?.email || "Ẩn danh",
+      ...(newDeadline ? { deadline: newDeadline } : { deadline: deleteField() })
+    };
+
+    await updateDoc(doc(db, "groups", groupId), payload);
+
+    if (g.title !== vals.title) {
+      await logAction(g.projectId, `cập nhật group "${g.title}" thành "${vals.title}"`, groupId);
+    }
+    if (!oldDeadline && newDeadline) {
+      await logAction(g.projectId, `đặt deadline cho group "${vals.title}" là ${formatDateVN(newDeadline)}`, groupId);
+    } else if (oldDeadline && newDeadline && oldDeadline !== newDeadline) {
+      await logAction(g.projectId, `đổi deadline group "${vals.title}" từ ${formatDateVN(oldDeadline)} sang ${formatDateVN(newDeadline)}`, groupId);
+    } else if (oldDeadline && !newDeadline) {
+      await logAction(g.projectId, `xóa deadline của group "${vals.title}"`, groupId);
+    }
+
+    const newData = { ...g, ...payload };
+    applyGroupColor(groupId, newData);
+  });
+}
+
+async function deleteGroup(groupId, g) {
+  if (!isAuthReady) return;
+  if (!confirm("Bạn có chắc muốn xóa group này?")) return;
+
+  const taskSnap = await getDocs(query(collection(db, "tasks"), where("groupId", "==", groupId)));
+  const tasksToDelete = taskSnap.docs.map(t => t.id);
+  await logAction(g.projectId, `xóa group "${g.title}" và ${tasksToDelete.length} task bên trong`, groupId);
+
+  taskSnap.forEach(async (t) => await deleteDoc(doc(db, "tasks", t.id)));
+  await deleteDoc(doc(db, "groups", groupId));
+}
+
+// ===== Task CRUD (Thêm) =====
+function openTaskModal(groupId, projectId) {
+  openModal("Thêm Task", [
+    { id: "title", placeholder: "Tên Task" },
+    { id: "comment", placeholder: "Comment (tùy chọn)", type: "textarea" },
+    { id: "deadline", label: "Hạn chót", type: "date" }, // Thêm trường deadline
+    { id: "color", label: "Màu", type: "color" },
+    { id: "progress", label: "Tiến độ", type: "range", value: 0 }
+  ], async (vals) => {
+    if (!isAuthReady) return;
+    const deadline = (vals.deadline && vals.deadline.trim()) ? vals.deadline.trim() : null;
+    const newDocRef = await addDoc(collection(db, "tasks"), {
+      title: vals.title,
+      comment: vals.comment || "",
+      deadline, // Lưu deadline vào task
+      color: vals.color || null,
+      progress: parseInt(vals.progress),
+      projectId,
+      groupId,
+      status: "todo",
+      createdAt: serverTimestamp(),
+      createdBy: currentUser?.email || "Ẩn danh"
+    });
+    await logAction(projectId, `thêm task mới "${vals.title}"` + (deadline ? ` (hạn chót ${formatDateVN(deadline)})` : ''), groupId);
+  });
+}
+
+// ===== Kéo & Thả (Drag & Drop) =====
+function setupDragDrop() {
+  ["inprogressCol", "doneCol"].forEach((colId) => {
+    const col = document.getElementById(colId);
+    if (!col) return;
+
+    col.addEventListener("dragover", (e) => e.preventDefault());
+
+    col.addEventListener("drop", async (e) => {
       e.preventDefault();
-      col.classList.remove('border-indigo-400');
 
       const type = e.dataTransfer.getData("type");
       if (type !== "task") return;
@@ -209,7 +931,7 @@ export const showTaskBoard = (projectId, projectTitle) => {
       const taskId = e.dataTransfer.getData("taskId");
       if (!taskId) return;
 
-      const newStatus = col.id === "inprogressCol" ? "inprogress" : "done";
+      const newStatus = colId === "inprogressCol" ? "inprogress" : "done";
 
       const taskRef = doc(db, "tasks", taskId);
       const taskSnap = await getDoc(taskRef);
@@ -239,402 +961,19 @@ export const showTaskBoard = (projectId, projectTitle) => {
       await logAction(taskData.projectId, logMessage);
     });
   });
+}
 
-  // Sự kiện thêm nhóm mới
-  document.getElementById('btnNewGroup').addEventListener('click', () => {
-    openModal(
-      'Tạo Nhóm Mới',
-      `
-      <form class="space-y-4">
-        <label for="groupTitle" class="block text-gray-700 font-semibold">Tên Nhóm:</label>
-        <input type="text" id="groupTitle" name="groupTitle" class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-        <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md transition-colors">Tạo Nhóm</button>
-      </form>
-      `,
-      async (form) => {
-        const groupTitle = form.groupTitle.value;
-        await addDoc(collection(db, "groups"), {
-          title: groupTitle,
-          projectId: projectId,
-          createdAt: serverTimestamp(),
-          createdBy: currentUser?.email || "Ẩn danh",
-        });
-        await logAction(projectId, `đã tạo một nhóm mới: "${groupTitle}"`);
-        showToast(`Nhóm "${groupTitle}" đã được tạo thành công.`);
-      }
-    );
-  });
-
-  // Lắng nghe và hiển thị log hoạt động
-  logsUnsub = onSnapshot(query(collection(db, `projects/${projectId}/logs`), where("timestamp", ">", new Date(Date.now() - 2 * 24 * 60 * 60 * 1000))), (snapshot) => {
-    const logList = document.getElementById('logList');
-    if (!logList) return;
-    logList.innerHTML = '';
-    snapshot.docs.sort((a, b) => b.data().timestamp - a.data().timestamp).forEach(doc => {
-      const logData = doc.data();
-      const logItem = document.createElement('li');
-      logItem.className = 'text-sm text-gray-600 bg-gray-50 p-2 rounded';
-      logItem.innerHTML = `<span class="font-semibold text-gray-800">${logData.user}</span> ${logData.message} <span class="text-xs text-gray-400">(${logData.timestamp?.toDate().toLocaleString()})</span>`;
-      logList.appendChild(logItem);
-    });
-  });
-
-  // Lắng nghe và cập nhật biểu đồ tiến độ dự án
-  const listenForProjectProgress = () => {
-    progressUnsub = onSnapshot(collection(db, "tasks"), async (snapshot) => {
-      const tasks = snapshot.docs.filter(doc => doc.data().projectId === projectId).map(doc => doc.data());
-      const totalTasks = tasks.length;
-      const doneTasks = tasks.filter(task => task.status === 'done').length;
-      const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-
-      const progressChartCtx = document.getElementById('projectProgressChart');
-      if (progressChartCtx && typeof Chart !== 'undefined') {
-        if (projectChart) {
-          projectChart.data.datasets[0].data = [progress, 100 - progress];
-          projectChart.update();
-        } else {
-          projectChart = new Chart(progressChartCtx, {
-            type: 'doughnut',
-            data: {
-              labels: ['Hoàn thành', 'Chưa hoàn thành'],
-              datasets: [{
-                data: [progress, 100 - progress],
-                backgroundColor: ['#4ade80', '#e5e7eb'],
-                borderWidth: 0,
-              }]
-            },
-            options: {
-              responsive: true,
-              plugins: {
-                legend: { position: 'bottom' },
-                tooltip: {
-                  callbacks: {
-                    label: (tooltipItem) => {
-                      return `${tooltipItem.label}: ${tooltipItem.raw}%`;
-                    }
-                  }
-                }
-              }
-            }
-          });
-        }
-      }
-    });
-  };
-
-  listenForProjectProgress();
-  loadGroups(projectId);
-};
-
-// Lắng nghe sự kiện click trên các nút cảm xúc thông qua event delegation
-document.addEventListener('click', async (e) => {
-  const reactionBtn = e.target.closest('.reaction-btn');
-  if (!reactionBtn) return;
-
-  const taskId = reactionBtn.dataset.taskId;
-  const reactionType = reactionBtn.dataset.reaction;
-
-  if (taskId && reactionType) {
-    const taskRef = doc(db, "tasks", taskId);
-    const taskSnap = await getDoc(taskRef);
-    if (!taskSnap.exists()) {
-      showToast("Không tìm thấy task để thả cảm xúc.");
-      return;
-    }
-    const taskData = taskSnap.data();
-
-    // Tăng giá trị cảm xúc
-    await updateDoc(taskRef, {
-      [`reactions.${reactionType}`]: increment(1)
-    });
-
-    // Ghi log hoạt động
-    await logAction(taskData.projectId, `đã thả cảm xúc "${reactionType}" vào task "${taskData.title}"`);
-    showToast(`Bạn đã thả cảm xúc "${reactionType}" vào task "${taskData.title}".`);
+// ===== Listener cho các nút chức năng chính =====
+function setupGroupListeners(projectId) {
+  const addGroupBtn = document.getElementById("addGroupBtn");
+  if (addGroupBtn) {
+    addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
-});
+}
 
-const loadGroups = (projectId) => {
-  groupsUnsub = onSnapshot(query(collection(db, "groups"), where("projectId", "==", projectId)), (snapshot) => {
-    const groupsContainer = document.getElementById('groupsContainer');
-    if (!groupsContainer) return;
-    const existingGroupIds = new Set();
-    snapshot.docChanges().forEach(change => {
-      const groupDoc = change.doc;
-      existingGroupIds.add(groupDoc.id);
 
-      if (change.type === "added" || change.type === "modified") {
-        renderGroup(groupDoc);
-      } else if (change.type === "removed") {
-        const groupEl = document.getElementById(`group-${groupDoc.id}`);
-        if (groupEl) {
-          groupEl.remove();
-        }
-      }
-    });
 
-    // Hủy các listener task cũ của những group đã bị xóa
-    for (const groupId in taskboardUnsubs) {
-      if (!existingGroupIds.has(groupId)) {
-        if (taskboardUnsubs[groupId]) {
-          taskboardUnsubs[groupId]();
-          delete taskboardUnsubs[groupId];
-        }
-      }
-    }
-  });
-};
 
-const renderGroup = (groupDoc) => {
-  const groupData = groupDoc.data();
-  const groupId = groupDoc.id;
-  const groupsContainer = document.getElementById('groupsContainer');
-  if (!groupsContainer) return;
 
-  let groupEl = document.getElementById(`group-${groupId}`);
-  if (!groupEl) {
-    groupEl = document.createElement('div');
-    groupEl.id = `group-${groupId}`;
-    groupEl.className = 'bg-white rounded-lg p-3 shadow-md border border-gray-200';
-    groupEl.innerHTML = `
-      <div class="flex justify-between items-center mb-2">
-        <h3 class="font-bold text-lg text-gray-800">${groupData.title}</h3>
-        <div class="flex space-x-1">
-          <button class="btn-edit-group text-gray-500 hover:text-blue-500 transition-colors" data-id="${groupId}" data-title="${groupData.title}">
-            <i class="fas fa-edit"></i>
-          </button>
-          <button class="btn-delete-group text-gray-500 hover:text-red-500 transition-colors" data-id="${groupId}">
-            <i class="fas fa-trash-alt"></i>
-          </button>
-        </div>
-      </div>
-      <div class="w-full bg-gray-200 rounded-full h-2.5 mb-2">
-        <div id="group-progress-${groupId}" class="bg-green-500 h-2.5 rounded-full" style="width: 0%;"></div>
-      </div>
-      <div id="tasks-${groupId}" class="space-y-3">
-        <!-- Tasks sẽ được thêm vào đây -->
-      </div>
-      <button class="btn-new-task w-full bg-gray-200 hover:bg-gray-300 text-gray-600 font-semibold py-2 rounded-md mt-4 transition-colors" data-group-id="${groupId}" data-project-id="${groupData.projectId}">
-        <i class="fas fa-plus mr-2"></i> Thêm Task
-      </button>
-    `;
-    groupsContainer.appendChild(groupEl);
-  } else {
-    // Nếu group đã tồn tại, chỉ cập nhật tiêu đề
-    groupEl.querySelector('h3').textContent = groupData.title;
-    groupEl.querySelector('.btn-edit-group').dataset.title = groupData.title;
-  }
 
-  // Sự kiện thêm task mới
-  groupEl.querySelector('.btn-new-task').addEventListener('click', () => {
-    openModal(
-      'Tạo Task Mới',
-      `
-      <form class="space-y-4">
-        <label for="taskTitle" class="block text-gray-700 font-semibold">Tiêu đề:</label>
-        <input type="text" id="taskTitle" name="taskTitle" class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-        <label for="taskAssignee" class="block text-gray-700 font-semibold">Người phụ trách (Email):</label>
-        <input type="email" id="taskAssignee" name="taskAssignee" class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-        <label for="taskDeadline" class="block text-gray-700 font-semibold">Hạn chót:</label>
-        <input type="date" id="taskDeadline" name="taskDeadline" class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-        <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md transition-colors">Tạo Task</button>
-      </form>
-      `,
-      async (form) => {
-        const taskTitle = form.taskTitle.value;
-        const taskAssignee = form.taskAssignee.value;
-        const taskDeadline = form.taskDeadline.value;
 
-        await addDoc(collection(db, "tasks"), {
-          title: taskTitle,
-          assignee: taskAssignee,
-          deadline: taskDeadline,
-          status: 'todo',
-          groupId: groupId,
-          projectId: groupData.projectId,
-          createdAt: serverTimestamp(),
-          createdBy: currentUser?.email || "Ẩn danh",
-          reactions: {} // Khởi tạo trường reactions
-        });
-        await logAction(groupData.projectId, `đã thêm một task mới: "${taskTitle}" vào nhóm "${groupData.title}"`);
-        showToast(`Task "${taskTitle}" đã được tạo thành công.`);
-      }
-    );
-  });
-
-  // Sự kiện chỉnh sửa nhóm
-  groupEl.querySelector('.btn-edit-group').addEventListener('click', (e) => {
-    const groupId = e.currentTarget.dataset.id;
-    const currentTitle = e.currentTarget.dataset.title;
-    openModal(
-      'Chỉnh Sửa Nhóm',
-      `
-      <form class="space-y-4">
-        <label for="editGroupTitle" class="block text-gray-700 font-semibold">Tên Nhóm:</label>
-        <input type="text" id="editGroupTitle" name="editGroupTitle" value="${currentTitle}" class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
-        <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md transition-colors">Lưu</button>
-      </form>
-      `,
-      async (form) => {
-        const newTitle = form.editGroupTitle.value;
-        const groupRef = doc(db, "groups", groupId);
-        await updateDoc(groupRef, {
-          title: newTitle,
-          updatedAt: serverTimestamp(),
-        });
-        await logAction(groupData.projectId, `đã chỉnh sửa tên nhóm từ "${currentTitle}" thành "${newTitle}"`);
-        showToast(`Nhóm đã được cập nhật thành công.`);
-      }
-    );
-  });
-
-  // Sự kiện xóa nhóm
-  groupEl.querySelector('.btn-delete-group').addEventListener('click', async (e) => {
-    if (confirm(`Bạn có chắc chắn muốn xóa nhóm "${groupData.title}" và tất cả các task của nó không?`)) {
-      const groupId = e.currentTarget.dataset.id;
-      const groupRef = doc(db, "groups", groupId);
-
-      // Xóa tất cả các task trong nhóm
-      const q = query(collection(db, "tasks"), where("groupId", "==", groupId));
-      const tasksSnapshot = await getDocs(q);
-      const batch = getFirestore().batch();
-      tasksSnapshot.forEach(taskDoc => {
-        batch.delete(taskDoc.ref);
-      });
-      await batch.commit();
-
-      // Xóa nhóm
-      await deleteDoc(groupRef);
-      await logAction(groupData.projectId, `đã xóa nhóm: "${groupData.title}"`);
-      showToast(`Nhóm "${groupData.title}" đã được xóa.`);
-    }
-  });
-
-  loadTasks(groupId);
-};
-
-const loadTasks = (groupId) => {
-  if (taskboardUnsubs[groupId]) {
-    taskboardUnsubs[groupId]();
-  }
-
-  const tasksRef = collection(db, "tasks");
-  const q = query(tasksRef, where("groupId", "==", groupId));
-
-  taskboardUnsubs[groupId] = onSnapshot(q, async (snapshot) => {
-    const tasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const todoTasks = tasks.filter(t => t.status === 'todo');
-    const inprogressTasks = tasks.filter(t => t.status === 'inprogress');
-    const doneTasks = tasks.filter(t => t.status === 'done');
-
-    const todoContainer = document.getElementById(`tasks-${groupId}`);
-    const inprogressCol = document.getElementById('inprogressCol');
-    const doneCol = document.getElementById('doneCol');
-
-    if (!todoContainer || !inprogressCol || !doneCol) return;
-
-    // Cập nhật tiến độ của nhóm
-    const progressEl = document.getElementById(`group-progress-${groupId}`);
-    if (progressEl) {
-      const progress = calculateGroupProgress(tasks);
-      progressEl.style.width = `${progress}%`;
-      progressEl.classList.toggle('bg-green-500', progress < 100);
-      progressEl.classList.toggle('bg-green-600', progress === 100);
-    }
-
-    // Xóa tất cả task cũ để render lại từ đầu
-    const allTaskElements = [...todoContainer.children, ...inprogressCol.children, ...doneCol.children];
-    allTaskElements.forEach(el => {
-      const elTaskId = el.dataset.taskId;
-      if (elTaskId && tasks.find(t => t.id === elTaskId) === undefined) {
-        el.remove();
-      }
-    });
-
-    // Render lại các task
-    todoContainer.innerHTML = '';
-    todoTasks.forEach(task => renderTask(task, todoContainer));
-
-    inprogressCol.innerHTML = '';
-    inprogressTasks.forEach(task => renderTask(task, inprogressCol));
-
-    doneCol.innerHTML = '';
-    doneTasks.forEach(task => renderTask(task, doneCol));
-  });
-};
-
-const renderTask = (taskData, container) => {
-  const taskId = taskData.id;
-  let taskItem = document.getElementById(`task-${taskId}`);
-  if (!taskItem) {
-    taskItem = document.createElement('div');
-    taskItem.id = `task-${taskId}`;
-    taskItem.className = 'task-item bg-white rounded-lg p-3 shadow-md border border-gray-200 cursor-pointer transition-transform duration-200 transform hover:scale-105';
-    taskItem.setAttribute('draggable', true);
-    taskItem.dataset.taskId = taskId;
-    taskItem.dataset.type = 'task';
-
-    taskItem.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('taskId', taskId);
-      e.dataTransfer.setData('type', 'task');
-      e.dataTransfer.effectAllowed = 'move';
-    });
-    container.appendChild(taskItem);
-  }
-
-  // Cập nhật nội dung của task
-  taskItem.innerHTML = `
-    <h4 class="font-semibold text-gray-800">${taskData.title}</h4>
-    <p class="text-xs text-gray-500">
-      <i class="fas fa-user-circle mr-1"></i> ${taskData.assignee}
-    </p>
-    <p class="text-xs text-gray-500">
-      <i class="fas fa-calendar-alt mr-1"></i> ${taskData.deadline}
-    </p>
-    <div class="flex items-center mt-2 space-x-2 text-xs text-gray-500">
-      <button class="reaction-btn hover:scale-125 transition-transform duration-200" data-task-id="${taskId}" data-reaction="like">👍 <span class="reaction-count text-sm font-semibold">${taskData.reactions?.like || 0}</span></button>
-      <button class="reaction-btn hover:scale-125 transition-transform duration-200" data-task-id="${taskId}" data-reaction="love">❤️ <span class="reaction-count text-sm font-semibold">${taskData.reactions?.love || 0}</span></button>
-      <button class="reaction-btn hover:scale-125 transition-transform duration-200" data-task-id="${taskId}" data-reaction="hooray">🎉 <span class="reaction-count text-sm font-semibold">${taskData.reactions?.hooray || 0}</span></button>
-      <button class="reaction-btn hover:scale-125 transition-transform duration-200" data-task-id="${taskId}" data-reaction="sad">😢 <span class="reaction-count text-sm font-semibold">${taskData.reactions?.sad || 0}</span></button>
-    </div>
-  `;
-};
-
-// ========================================================================
-// === Đây là đoạn code được thêm vào để xử lý xác thực người dùng  ===
-// === và khởi chạy ứng dụng sau khi xác thực thành công.              ===
-// ========================================================================
-let isInitialRun = true;
-onAuthStateChanged(auth, async (user) => {
-  if (user) {
-    currentUser = user;
-    if (!isAuthReady) {
-      isAuthReady = true;
-      console.log("Xác thực thành công. Sẵn sàng khởi chạy ứng dụng.");
-      // Chạy ứng dụng lần đầu
-      if (isInitialRun) {
-        window.dispatchEvent(new Event('hashchange'));
-        isInitialRun = false;
-      }
-    }
-  } else {
-    currentUser = null;
-    isAuthReady = false;
-    console.log("Người dùng chưa được xác thực.");
-    // Có thể chuyển hướng đến trang đăng nhập nếu cần
-    // window.location.hash = '#login';
-  }
-});
-
-// Sự kiện hashchange để điều hướng trang
-window.addEventListener('hashchange', () => {
-  const hash = window.location.hash.substring(1);
-  if (hash.startsWith('taskboard/')) {
-    const parts = hash.split('/');
-    if (parts.length === 3) {
-      const projectId = parts[1];
-      const projectTitle = decodeURIComponent(parts[2]);
-      showTaskBoard(projectId, projectTitle);
-    }
-  }
-});
