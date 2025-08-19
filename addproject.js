@@ -19,24 +19,25 @@ import { getAuth } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
 import { showTaskBoard } from "./tasks.js";
 
-// Debug log để kiểm tra file đã được tải
+// Debug log
 console.log("addproject.js loaded OK");
 
-// ===== Cấu hình Firebase =====
-// Sử dụng biến toàn cục được cung cấp bởi môi trường Canvas
-const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+// ===== Firebase config =====
+const firebaseConfig = {
+  apiKey: "AIzaSyBw3hWbWLvr2W2pdPL8_wKNB5x_BcnwrOI",
+  authDomain: "task-806e4.firebaseapp.com",
+  projectId: "task-806e4",
+  storageBucket: "task-806e4.firebasestorage.app",
+  messagingSenderId: "638366751634",
+  appId: "1:638366751634:web:1cff140df54007edecff4b",
+  measurementId: "G-TLJSXWQBZD"
+};
+// ===== Init Firebase =====
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-// ===== Khởi tạo Firebase =====
-let app, auth, db;
-try {
-  app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  db = getFirestore(app);
-} catch (error) {
-  console.error("Lỗi khi khởi tạo Firebase:", error);
-}
-
-// ===== Các phần tử DOM =====
+// ===== DOM elements =====
 const projectArea = document.getElementById("projectArea");
 const addProjectBtn = document.getElementById("addProjectBtn");
 const projectModal = document.getElementById("projectModal");
@@ -52,14 +53,14 @@ const deleteModal = document.getElementById("deleteModal");
 const confirmDeleteBtn = document.getElementById("confirmDeleteBtn");
 const cancelDeleteBtn = document.getElementById("cancelDeleteBtn");
 
-// Khởi tạo các phần tử modal sao chép nếu chúng chưa tồn tại
-let copyModal = null;
-let newProjectTitleInput = null;
-let confirmCopyBtn = null;
-let cancelCopyBtn = null;
+// Copy modal elements (tạo nếu chưa có)
+let copyModal = document.getElementById("copyModal");
+let newProjectTitleInput = document.getElementById("newProjectTitle");
+let confirmCopyBtn = document.getElementById("confirmCopyBtn");
+let cancelCopyBtn = document.getElementById("cancelCopyBtn");
 
 function ensureCopyModal() {
-  if (copyModal) return;
+  if (copyModal && newProjectTitleInput && confirmCopyBtn && cancelCopyBtn) return;
 
   const wrapper = document.createElement("div");
   wrapper.innerHTML = `
@@ -82,9 +83,7 @@ function ensureCopyModal() {
   confirmCopyBtn = document.getElementById("confirmCopyBtn");
   cancelCopyBtn = document.getElementById("cancelCopyBtn");
 
-  if (cancelCopyBtn) {
-    cancelCopyBtn.addEventListener("click", () => hideModal("copyModal"));
-  }
+  cancelCopyBtn.addEventListener("click", () => hideModal("copyModal"));
 }
 
 // ===== State =====
@@ -92,28 +91,26 @@ let isEditing = false;
 let currentProjectId = null;
 let openedProjectId = null;
 
-// ===== Hàm tiện ích =====
+// ===== Utility =====
 function showModal(modalId) {
   const el = document.getElementById(modalId);
-  if (el) {
-    el.classList.remove("hidden");
-    el.classList.add("flex");
-  }
+  if (!el) return;
+  el.classList.remove("hidden");
+  el.classList.add("flex");
 }
 
 function hideModal(modalId) {
   const modal = document.getElementById(modalId);
-  if (modal) {
-    modal.classList.add("hidden");
-    modal.classList.remove("flex");
-  }
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.classList.remove("flex");
 }
-
 function displayName(email) {
-  return email ? String(email).split("@")[0] : "Ẩn danh";
+  if (!email) return "Ẩn danh";
+  return String(email).split("@")[0];
 }
 
-// ===== Cuộn đến tiêu đề dự án =====
+// ===== Scroll to project title =====
 function scrollToProjectTitle() {
   const projectTitle = document.querySelector("#taskBoard h2");
   if (projectTitle) {
@@ -121,11 +118,10 @@ function scrollToProjectTitle() {
   }
 }
 
-// ===== Cập nhật đếm ngược và màu sắc thẻ dự án =====
+// ===== Calculate countdown and update color =====
 function updateCountdownAndColor(projectCard, endDate) {
   if (!endDate) {
-    const countdownElement = projectCard.querySelector(".countdown");
-    if (countdownElement) countdownElement.remove();
+    projectCard.querySelector(".countdown")?.remove();
     return;
   }
 
@@ -138,28 +134,21 @@ function updateCountdownAndColor(projectCard, endDate) {
   if (!countdownElement) {
     countdownElement = document.createElement("p");
     countdownElement.className = "text-gray-800 text-3xl countdown";
-    const titleElement = projectCard.querySelector("h4");
-    if (titleElement) {
-      projectCard.insertBefore(countdownElement, titleElement.nextSibling);
-    }
+    projectCard.insertBefore(countdownElement, projectCard.querySelector("div.flex"));
   }
 
   if (diffMs <= 0) {
     countdownElement.textContent = "Đã đến hạn";
-    projectCard.classList.remove("bg-white", "border-gray-200");
-    projectCard.classList.add("bg-red-200", "border-red-400");
-  } else if (diffDays <= 7) {
-    countdownElement.textContent = `Còn ${diffDays} ngày`;
-    projectCard.classList.remove("bg-white", "border-gray-200");
-    projectCard.classList.add("bg-yellow-200", "border-yellow-400");
+    projectCard.classList.add("bg-green-500");
+    projectCard.classList.remove("bg-white");
   } else {
     countdownElement.textContent = `Còn ${diffDays} ngày`;
-    projectCard.classList.remove("bg-red-200", "border-red-400", "bg-yellow-200", "border-yellow-400");
-    projectCard.classList.add("bg-white", "border-gray-200");
+    projectCard.classList.remove("bg-green-500");
+    projectCard.classList.add("bg-white");
   }
 }
 
-// ===== Hiển thị thẻ dự án =====
+// ===== Render project card =====
 function renderProject(docSnap) {
   const data = docSnap.data();
   const id = docSnap.id;
@@ -187,13 +176,15 @@ function renderProject(docSnap) {
   `;
   projectArea.appendChild(projectCard);
 
+  // Cập nhật thời gian đếm ngược và màu sắc
   updateCountdownAndColor(projectCard, data.endDate);
+
+  // Cập nhật realtime cho đếm ngược
   setInterval(() => updateCountdownAndColor(projectCard, data.endDate), 60000); // Cập nhật mỗi phút
 }
 
-// ===== Lắng nghe thay đổi của các dự án trong thời gian thực =====
+// ===== Real-time listener =====
 function setupProjectListener() {
-  if (!db) return;
   const projectsCol = collection(db, "projects");
   const q = query(projectsCol, orderBy("createdAt", "desc"));
 
@@ -203,24 +194,33 @@ function setupProjectListener() {
       renderProject(doc);
     });
 
-    // Gắn sự kiện cho các nút sau khi render
     document.querySelectorAll(".edit-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         const id = e.currentTarget.dataset.id;
         const docToEdit = snapshot.docs.find((d) => d.id === id);
-        if (docToEdit) editProject(id, docToEdit.data());
+        if (docToEdit) {
+          editProject(id, docToEdit.data());
+        }
       });
     });
+
     document.querySelectorAll(".delete-btn").forEach((btn) => {
-      btn.addEventListener("click", (e) => showDeleteConfirmation(e.currentTarget.dataset.id));
+      btn.addEventListener("click", (e) => {
+        const id = e.currentTarget.dataset.id;
+        showDeleteConfirmation(id);
+      });
     });
+
     document.querySelectorAll(".copy-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         const id = e.currentTarget.dataset.id;
         const docToCopy = snapshot.docs.find((d) => d.id === id);
-        if (docToCopy) copyProject(id, docToCopy.data());
+        if (docToCopy) {
+          copyProject(id, docToCopy.data());
+        }
       });
     });
+
     document.querySelectorAll(".view-tasks-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         const id = e.currentTarget.dataset.id;
@@ -237,7 +237,7 @@ function setupProjectListener() {
   });
 }
 
-// ===== Xử lý Thêm / Cập nhật dự án =====
+// ===== Add / Update project =====
 saveProjectBtn.addEventListener("click", async () => {
   const title = projectTitleInput.value.trim();
   const description = projectDescriptionInput.value.trim();
@@ -246,58 +246,62 @@ saveProjectBtn.addEventListener("click", async () => {
   const comment = projectCommentInput.value.trim();
 
   if (!title) {
-    console.error("Vui lòng nhập tên dự án.");
+    console.error("Please enter a project title.");
     return;
   }
 
   try {
     const user = auth.currentUser;
-    const projectData = {
-      title,
-      description,
-      startDate,
-      endDate,
-      comment,
-      updatedAt: serverTimestamp(),
-    };
 
     if (isEditing) {
       const projectDocRef = doc(db, "projects", currentProjectId);
-      await updateDoc(projectDocRef, projectData);
+      await updateDoc(projectDocRef, {
+        title,
+        description,
+        startDate,
+        endDate,
+        comment,
+        updatedAt: new Date()
+      });
     } else {
       await addDoc(collection(db, "projects"), {
-        ...projectData,
-        createdAt: serverTimestamp(),
+        title,
+        description,
+        startDate,
+        endDate,
+        comment,
+        createdAt: new Date(),
         createdBy: user ? user.email : "Ẩn danh"
       });
     }
 
     hideModal("projectModal");
-    // Xóa form sau khi lưu
     projectTitleInput.value = "";
     projectDescriptionInput.value = "";
     projectStartInput.value = "";
     projectEndInput.value = "";
     projectCommentInput.value = "";
   } catch (e) {
-    console.error("Lỗi khi thêm/cập nhật dự án:", e);
+    console.error("Error adding/updating project: ", e);
   }
 });
 
-// ===== Chỉnh sửa dự án =====
+// ===== Edit project =====
 function editProject(id, data) {
   isEditing = true;
   currentProjectId = id;
+
   projectModalTitle.textContent = "Cập nhật dự án";
   projectTitleInput.value = data.title || "";
   projectDescriptionInput.value = data.description || "";
   projectStartInput.value = data.startDate || "";
   projectEndInput.value = data.endDate || "";
   projectCommentInput.value = data.comment || "";
+
   showModal("projectModal");
 }
 
-// ===== Sao chép dự án =====
+// ===== Copy project =====
 function copyProject(id, data) {
   ensureCopyModal();
   currentProjectId = id;
@@ -305,7 +309,28 @@ function copyProject(id, data) {
   showModal("copyModal");
 }
 
-// Gắn sự kiện cho nút sao chép trong modal
+async function copyTaskSubcollections(oldTaskId, newTaskId) {
+  const subs = [];
+  for (const sub of subs) {
+    const q = query(collection(db, `tasks/${oldTaskId}/${sub}`));
+    const snap = await getDocs(q);
+    if (snap.empty) continue;
+    const ops = snap.docs.map((d) => {
+      const data = d.data();
+      delete data.createdAt;
+      delete data.updatedAt;
+      return addDoc(collection(db, `tasks/${newTaskId}/${sub}`), {
+        ...data,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    });
+    await Promise.all(ops);
+  }
+}
+
+ensureCopyModal();
+
 if (confirmCopyBtn) {
   confirmCopyBtn.addEventListener("click", async () => {
     const newTitle = (newProjectTitleInput?.value || "").trim();
@@ -313,6 +338,7 @@ if (confirmCopyBtn) {
       console.error("Vui lòng nhập tên cho dự án mới.");
       return;
     }
+
     confirmCopyBtn.disabled = true;
 
     try {
@@ -321,8 +347,9 @@ if (confirmCopyBtn) {
       if (!srcDoc.exists()) throw new Error("Dự án gốc không tồn tại.");
       const src = srcDoc.data() || {};
 
+      const { createdAt, updatedAt, createdBy, ...rest } = src;
       const newProjectRef = await addDoc(collection(db, "projects"), {
-        ...src,
+        ...rest,
         title: newTitle,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -330,15 +357,16 @@ if (confirmCopyBtn) {
       });
       const newProjectId = newProjectRef.id;
 
-      // Sao chép các nhóm
       const groupsQ = query(collection(db, "groups"), where("projectId", "==", currentProjectId));
       const groupsSnap = await getDocs(groupsQ);
+
       const groupIdMap = new Map();
       await Promise.all(
         groupsSnap.docs.map(async (g) => {
           const gData = g.data();
+          const { createdAt, updatedAt, projectId, ...gRest } = gData;
           const newGRef = await addDoc(collection(db, "groups"), {
-            ...gData,
+            ...gRest,
             projectId: newProjectId,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
@@ -347,21 +375,26 @@ if (confirmCopyBtn) {
         })
       );
 
-      // Sao chép các task
       const tasksQ = query(collection(db, "tasks"), where("projectId", "==", currentProjectId));
       const tasksSnap = await getDocs(tasksQ);
+
       await Promise.all(
         tasksSnap.docs.map(async (t) => {
           const tData = t.data();
+          const { createdAt, updatedAt, projectId, groupId, ...tRest } = tData;
+
           const newTaskRef = await addDoc(collection(db, "tasks"), {
-            ...tData,
+            ...tRest,
             projectId: newProjectId,
-            groupId: tData.groupId ? groupIdMap.get(tData.groupId) || null : null,
+            groupId: groupId ? groupIdMap.get(groupId) || null : null,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
           });
+
+          await copyTaskSubcollections(t.id, newTaskRef.id);
         })
       );
+
       hideModal("copyModal");
       console.log("Đã sao chép dự án và toàn bộ dữ liệu liên quan thành công!");
     } catch (e) {
@@ -372,7 +405,11 @@ if (confirmCopyBtn) {
   });
 }
 
-// ===== Xóa dự án và dữ liệu liên quan =====
+if (cancelCopyBtn) {
+  cancelCopyBtn.addEventListener("click", () => hideModal("copyModal"));
+}
+
+// ===== Delete project and associated data =====
 function showDeleteConfirmation(id) {
   currentProjectId = id;
   showModal("deleteModal");
@@ -380,13 +417,25 @@ function showDeleteConfirmation(id) {
 
 confirmDeleteBtn.addEventListener("click", async () => {
   try {
-    const collectionsToDelete = ["tasks", "groups", "logs", "progress_history"];
-    for (const colName of collectionsToDelete) {
-      const q = query(collection(db, colName), where("projectId", "==", currentProjectId));
-      const snapshot = await getDocs(q);
-      await Promise.all(snapshot.docs.map(d => deleteDoc(d.ref)));
-    }
-    
+    const tasksQuery = query(collection(db, "tasks"), where("projectId", "==", currentProjectId));
+    const tasksSnapshot = await getDocs(tasksQuery);
+    const tasksToDelete = tasksSnapshot.docs.map((docu) => deleteDoc(docu.ref));
+    await Promise.all(tasksToDelete);
+
+    const groupsQuery = query(collection(db, "groups"), where("projectId", "==", currentProjectId));
+    const groupsSnapshot = await getDocs(groupsQuery);
+    const groupsToDelete = groupsSnapshot.docs.map((docu) => deleteDoc(docu.ref));
+    await Promise.all(groupsToDelete);
+
+    const logsQuery = query(collection(db, "logs"), where("projectId", "==", currentProjectId));
+    const logsSnapshot = await getDocs(logsQuery);
+    const logsToDelete = logsSnapshot.docs.map((docu) => deleteDoc(docu.ref));
+    await Promise.all(logsToDelete);
+
+    const progressQuery = query(collection(db, "progress_history"), where("projectId", "==", currentProjectId));
+    const progressSnapshot = await getDocs(progressQuery);
+    await Promise.all(progressSnapshot.docs.map((docu) => deleteDoc(docu.ref)));
+
     await deleteDoc(doc(db, "projects", currentProjectId));
     if (openedProjectId === currentProjectId) {
       const taskBoard = document.getElementById("taskBoard");
@@ -395,13 +444,14 @@ confirmDeleteBtn.addEventListener("click", async () => {
     }
     hideModal("deleteModal");
   } catch (e) {
-    console.error("Lỗi khi xóa dự án và dữ liệu liên quan:", e);
+    console.error("Error deleting project and associated data: ", e);
   }
 });
 
-// ===== Gắn sự kiện cho các nút =====
 cancelDeleteBtn.addEventListener("click", () => hideModal("deleteModal"));
 cancelProjectBtn.addEventListener("click", () => hideModal("projectModal"));
+
+// ===== Add project modal =====
 addProjectBtn.addEventListener("click", () => {
   isEditing = false;
   projectModalTitle.textContent = "Tạo dự án mới";
@@ -411,6 +461,22 @@ addProjectBtn.addEventListener("click", () => {
   projectEndInput.value = "";
   projectCommentInput.value = "";
   showModal("projectModal");
+});
+
+// ===== Auth listener =====
+auth.onAuthStateChanged((user) => {
+  if (user) {
+    addProjectBtn.classList.remove("hidden");
+    setupProjectListener();
+    setupSidebar();
+  } else {
+    projectArea.innerHTML = "";
+    addProjectBtn.classList.add("hidden");
+    const sidebar = document.getElementById("projectSidebar");
+    if (sidebar) sidebar.remove();
+    const homeIcon = document.getElementById("homeIcon");
+    if (homeIcon) homeIcon.remove();
+  }
 });
 
 // ===== Thêm thanh công cụ bên trái (Sidebar) =====
@@ -428,8 +494,8 @@ function setupSidebar() {
   if (!sidebar) {
     sidebar = document.createElement("div");
     sidebar.id = "projectSidebar";
-    // Mặc định ẩn
-    sidebar.className = "fixed top-0 left-0 h-full w-[2cm] bg-gradient-to-b from-green-900 to-black text-white shadow-lg z-40 overflow-y-auto p-4 pt-[3cm] hidden";
+    sidebar.className =
+      "fixed top-0 left-0 h-full w-[2cm] bg-gradient-to-b from-green-900 to-black text-white shadow-lg z-40 overflow-y-auto p-4 pt-[3cm] hidden";
     sidebar.innerHTML = `
       <h3 class="text-lg font-bold mb-4 text-green-200"></h3>
       <div id="username" class="text-sm mb-2"></div>
@@ -441,14 +507,15 @@ function setupSidebar() {
     document.body.appendChild(sidebar);
   }
 
-  // Sự kiện click để bật/tắt hiển thị sidebar
   homeIcon.addEventListener("click", () => {
     sidebar.classList.toggle("hidden");
   });
 
-  // Lắng nghe thay đổi của các dự án để cập nhật sidebar
+
+
   const projectsCol = collection(db, "projects");
   const q = query(projectsCol, orderBy("createdAt", "desc"));
+
   onSnapshot(q, (snapshot) => {
     const sidebarList = document.getElementById("sidebarProjectList");
     sidebarList.innerHTML = "";
@@ -468,19 +535,3 @@ function setupSidebar() {
     });
   });
 }
-
-// ===== Lắng nghe trạng thái xác thực người dùng =====
-auth.onAuthStateChanged((user) => {
-  if (user) {
-    addProjectBtn.classList.remove("hidden");
-    setupProjectListener();
-    setupSidebar();
-  } else {
-    projectArea.innerHTML = "";
-    addProjectBtn.classList.add("hidden");
-    const sidebar = document.getElementById("projectSidebar");
-    if (sidebar) sidebar.remove();
-    const homeIcon = document.getElementById("homeIcon");
-    if (homeIcon) homeIcon.remove();
-  }
-});
