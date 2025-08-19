@@ -238,8 +238,12 @@ const DEADLINE_CFG = {
 function daysUntil(dateStr) {
   if (!dateStr) return Infinity;
   const today = new Date();
-  const d = new Date(dateStr + "T23:59:59");
-  return Math.floor((d - today) / (1000 * 60 * 60 * 24));
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(dateStr);
+  d.setHours(0, 0, 0, 0);
+  const diffTime = d.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
 }
 
 function colorClassByDaysLeft(days, cfg = DEADLINE_CFG) {
@@ -634,7 +638,9 @@ function renderTask(docSnap) {
 
   const progressColor = task.progress >= 100 ? "bg-green-500" : "bg-blue-500";
   const progressText = `<span class="text-xs text-white font-semibold">${task.progress || 0}%</span>`;
-  const progressLine = `<div class="h-2 ${progressColor} transition-all duration-300 rounded-full" style="width: ${task.progress || 0}%;"></div>`;
+  const progressLine = `<div class="relative h-4 ${progressColor} transition-all duration-300 rounded-full flex items-center justify-center" style="width: ${task.progress || 0}%;">
+    ${progressText}
+  </div>`;
 
   const emojiDisplay = task.emoji ? `<span class="ml-2">${task.emoji}</span>` : '';
 
@@ -652,9 +658,8 @@ function renderTask(docSnap) {
             </div>
         </div>
         <p class="text-sm text-gray-600 mt-1">${task.description || ''}</p>
-        <div class="relative w-full bg-gray-200 rounded-full mt-2">
+        <div class="w-full bg-gray-200 rounded-full h-4 mt-2">
             ${progressLine}
-            <div class="absolute inset-0 flex items-center justify-center">${progressText}</div>
         </div>
     </div>
   `;
