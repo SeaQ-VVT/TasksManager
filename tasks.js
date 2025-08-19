@@ -227,7 +227,7 @@ function listenForLogs(projectId) {
 // ===== Cấu hình và Helpers cho Deadline =====
 const DEADLINE_CFG = {
   thresholds: [14, 7, 3], // <=14 cam, <=7 vàng, <=3 đỏ
-  classes: ["bg-orange-100", "bg-yellow-100", "bg-red-100"],
+  classes: ["bg-orange-100", "bg-yellow-300", "bg-red-400"],
 };
 
 function daysUntil(dateStr) {
@@ -789,18 +789,21 @@ function renderTask(docSnap) {
   }
 
   // Thêm class màu nền cho task nếu có deadline gần kề
-  if (t.deadline) {
-      const daysLeft = daysUntil(t.deadline);
-      const deadlineClass = colorClassByDaysLeft(daysLeft);
-      // Xóa các class màu nền cũ trước khi thêm màu mới
-      row.classList.remove("bg-red-100", "bg-yellow-100", "bg-orange-100");
-      if (deadlineClass) {
-          row.classList.add(deadlineClass);
-      }
-  } else {
-      // Nếu không có deadline, đảm bảo không có màu nền nào
-      row.classList.remove("bg-red-100", "bg-yellow-100", "bg-orange-100");
-  }
+if (t.deadline) {
+    const daysLeft = daysUntil(t.deadline);
+    const deadlineClass = colorClassByDaysLeft(daysLeft);
+
+    // luôn bỏ màu trước khi xử lý
+    row.classList.remove("bg-red-100", "bg-yellow-200", "bg-orange-300");
+
+    // 🚫 Không áp màu nếu task đã Done
+    if (deadlineClass && t.status !== "done") {
+        row.classList.add(deadlineClass);
+    }
+} else {
+    row.classList.remove("bg-red-100", "bg-yellow-200", "bg-orange-300");
+}
+
 
   const taskInfo = row.querySelector(`#task-info-${tid}`);
   if (taskInfo) {
@@ -967,6 +970,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
