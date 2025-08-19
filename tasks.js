@@ -309,7 +309,7 @@ export function showTaskBoard(projectId, projectTitle) {
       <div id="logEntries" class="space-y-2 text-sm text-gray-600 hidden"></div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 w-full mt-4">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 w-full mt-4 overflow-x-hidden">
       <!-- Cột To Do -->
       <div class="bg-white p-3 rounded-2xl shadow flex flex-col border-4 border-teal-200 h-full">
         <div class="flex justify-between items-center mb-2">
@@ -335,7 +335,7 @@ export function showTaskBoard(projectId, projectTitle) {
     <!-- Biểu đồ tổng tiến độ dự án -->
     <div id="project-progress-chart-container" class="mt-8 bg-white p-4 rounded shadow">
         <h3 class="font-bold text-gray-800 mb-2">Tiến độ tổng thể dự án</h3>
-        <canvas id="project-progress-chart" class="w-full h-64"></canvas>
+        <canvas id="project-progress-chart" class="w-full h-[200px]"></canvas>
     </div>
   `;
 
@@ -634,7 +634,7 @@ function renderTask(docSnap) {
 
   const progressColor = task.progress >= 100 ? "bg-green-500" : "bg-blue-500";
   const progressText = `<span class="text-xs text-white font-semibold">${task.progress || 0}%</span>`;
-  const progressLine = `<div class="h-1 ${progressColor} transition-all duration-300 rounded-full" style="width: ${task.progress || 0}%;"></div>`;
+  const progressLine = `<div class="h-2 ${progressColor} transition-all duration-300 rounded-full" style="width: ${task.progress || 0}%;"></div>`;
 
   const emojiDisplay = task.emoji ? `<span class="ml-2">${task.emoji}</span>` : '';
 
