@@ -88,7 +88,7 @@ function openModal(title, fields, onSave) {
     } else if (f.type === "date") {
       fieldsDiv.innerHTML += `
         <div class="flex flex-col">
-          <label for="${f.id}" class="text-gray-700">${f.label || 'Ngày'}:</label>
+          <label for="${f.id}" class="text-gray-700">${f.label || 'Hạn Chót'}:</label>
           <input id="${f.id}" type="date" class="border p-2 w-full rounded-md" value="${f.value || ""}">
         </div>`;
     } else {
@@ -967,3 +967,4 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
