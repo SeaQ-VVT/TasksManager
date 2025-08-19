@@ -307,7 +307,7 @@ export function showTaskBoard(projectId, projectTitle) {
     <!-- Cập nhật lớp Tailwind cho các cột để có cùng chiều cao và thanh cuộn -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 w-full mt-4">
       <!-- Cột To Do -->
-      <div class="bg-white p-3 rounded shadow flex flex-col">
+      <div class="bg-white p-3 rounded shadow flex flex-col border-4 border-teal-400">
         <div class="flex justify-between items-center mb-2">
           <h3 class="font-bold text-red-600">To Do</h3>
           <button id="addGroupBtn" class="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600 transition-colors">
@@ -318,13 +318,13 @@ export function showTaskBoard(projectId, projectTitle) {
         <div id="groupContainer" class="space-y-3 mt-2 h-[30cm] overflow-y-auto"></div>
       </div>
       <!-- Cột In Progress -->
-      <div class="bg-white p-3 rounded shadow flex flex-col">
+      <div class="bg-white p-3 rounded shadow flex flex-col border-4 border-blue-400">
         <h3 class="font-bold text-yellow-600 mb-2">In Progress</h3>
         <!-- Thêm chiều cao cố định và thanh cuộn cho cột In Progress -->
         <div id="inprogressCol" class="space-y-3 mt-2 h-[30cm] overflow-y-auto"></div>
       </div>
       <!-- Cột Done -->
-      <div class="bg-white p-3 rounded shadow flex flex-col">
+      <div class="bg-white p-3 rounded shadow flex flex-col border-4 border-green-800">
         <h3 class="font-bold text-green-600 mb-2">Done</h3>
         <!-- Thêm chiều cao cố định và thanh cuộn cho cột Done -->
         <div id="doneCol" class="space-y-3 mt-2 h-[30cm] overflow-y-auto"></div>
@@ -970,6 +970,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
