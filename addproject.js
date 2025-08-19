@@ -156,7 +156,7 @@ function renderProject(docSnap) {
   const projectCard = document.createElement("div");
   projectCard.className =
    //"bg-white p-6 rounded-lg shadow-md border border-gray-200 transition-transform transform hover:scale-105 mb-4";
-    "bg-white p-4 rounded-lg shadow-md border border-gray-200 w-full max-w-sm";
+   "grid gap-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5";
   const createdAt = data.createdAt?.toDate ? data.createdAt.toDate().toLocaleString() : "-";
 
   projectCard.innerHTML = `
@@ -535,4 +535,5 @@ function setupSidebar() {
     });
   });
 }
+
 
