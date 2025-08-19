@@ -227,7 +227,7 @@ function listenForLogs(projectId) {
 // ===== Cấu hình và Helpers cho Deadline =====
 const DEADLINE_CFG = {
   thresholds: [14, 7, 3], // <=14 cam, <=7 vàng, <=3 đỏ
-  classes: ["ring-2 ring-orange-300", "ring-2 ring-yellow-400", "ring-2 ring-red-500"],
+  classes: ["bg-orange-100", "bg-yellow-100", "bg-red-100"],
 };
 
 function daysUntil(dateStr) {
@@ -257,7 +257,7 @@ function getGroupWarnClass(g) {
 function removeWarnClasses(el) {
   if (!el) return;
   [...el.classList].forEach(c => {
-    if (c.startsWith("ring-")) el.classList.remove(c);
+    if (c.startsWith("bg-")) el.classList.remove(c);
   });
 }
 
@@ -788,14 +788,26 @@ function renderTask(docSnap) {
     progressBar.style.width = `${t.progress || 0}%`;
   }
 
+  // Thêm class màu nền cho task nếu có deadline gần kề
+  if (t.deadline) {
+      const daysLeft = daysUntil(t.deadline);
+      const deadlineClass = colorClassByDaysLeft(daysLeft);
+      // Xóa các class màu nền cũ trước khi thêm màu mới
+      row.classList.remove("bg-red-100", "bg-yellow-100", "bg-orange-100");
+      if (deadlineClass) {
+          row.classList.add(deadlineClass);
+      }
+  } else {
+      // Nếu không có deadline, đảm bảo không có màu nền nào
+      row.classList.remove("bg-red-100", "bg-yellow-100", "bg-orange-100");
+  }
+
   const taskInfo = row.querySelector(`#task-info-${tid}`);
   if (taskInfo) {
       taskInfo.innerHTML = '';
       if (t.deadline) {
           const deadlineSpan = document.createElement('span');
-          const daysLeft = daysUntil(t.deadline);
-          const deadlineClass = colorClassByDaysLeft(daysLeft);
-          deadlineSpan.className = `ml-1 ${deadlineClass}`;
+          deadlineSpan.className = "ml-1 text-gray-700";
           deadlineSpan.innerHTML = `⏰ ${formatDateVN(t.deadline)}`;
           taskInfo.appendChild(deadlineSpan);
       }
@@ -955,4 +967,3 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
-
