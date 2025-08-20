@@ -195,11 +195,9 @@ let logsUnsub = null;
 function getLastSeenKey(projectId) {
   return `lastSeen_${projectId}`;
 }
-
 function loadLastSeen(projectId) {
   return parseInt(localStorage.getItem(getLastSeenKey(projectId))) || 0;
 }
-
 function saveLastSeen(projectId, ts) {
   localStorage.setItem(getLastSeenKey(projectId), ts);
 }
@@ -218,34 +216,59 @@ function listenForLogs(projectId) {
   logsUnsub = onSnapshot(q, (snapshot) => {
     const logs = [];
     snapshot.forEach((doc) => logs.push(doc.data()));
-    logs.sort((a, b) => a.timestamp - b.timestamp); // từ cũ → mới
+    logs.sort((a, b) => a.timestamp - b.timestamp); // từ cũ -> mới
 
-    // 🔹 Lần đầu vào: show tất cả log > lastSeen
-    logs.forEach(l => {
+    // 📌 Render nhật ký
+    const logEntries = document.getElementById("logEntries");
+    if (logEntries) {
+      logEntries.innerHTML = "";
+      logs.forEach((data) => {
+        const timestamp = data.timestamp?.toDate ? data.timestamp.toDate().toLocaleString() : "-";
+        const userDisplayName = getUserDisplayName(data.user);
+        const logItem = document.createElement("div");
+        logItem.textContent = `[${timestamp}] ${userDisplayName} đã ${data.action}.`;
+        logEntries.appendChild(logItem);
+      });
+    }
+
+    // 📌 Lần đầu: hiện tất cả log mới hơn lastSeen
+    const newLogs = logs.filter(l => {
       const t = l.timestamp?.toDate ? l.timestamp.toDate().getTime() : 0;
-      if (t > lastSeen) {
-        const userDisplayName = getUserDisplayName(l.user);
-        showToast(`${userDisplayName} đã ${l.action}.`);
-        lastSeen = t;
-        saveLastSeen(projectId, lastSeen);
-      }
+      return t > lastSeen;
+    });
+    newLogs.forEach(l => {
+      const userDisplayName = getUserDisplayName(l.user);
+      showToast(`${userDisplayName} đã ${l.action}.`);
+    });
+    if (newLogs.length > 0) {
+      const newest = newLogs[newLogs.length - 1];
+      lastSeen = newest.timestamp?.toDate ? newest.timestamp.toDate().getTime() : lastSeen;
+      saveLastSeen(projectId, lastSeen);
+    }
+
+    // 📌 Realtime: log mới thêm
+    const addedLogs = snapshot.docChanges()
+      .filter(change => change.type === "added")
+      .map(change => change.doc.data());
+
+    const freshLogs = addedLogs.filter(l => {
+      const t = l.timestamp?.toDate ? l.timestamp.toDate().getTime() : 0;
+      return t > lastSeen;
     });
 
-    // 🔹 Realtime: chỉ log mới thêm
-    snapshot.docChanges().forEach((change) => {
-      if (change.type === "added") {
-        const data = change.doc.data();
-        const t = data.timestamp?.toDate ? data.timestamp.toDate().getTime() : 0;
-        if (t > lastSeen) {
-          const userDisplayName = getUserDisplayName(data.user);
-          showToast(`${userDisplayName} đã ${data.action}.`);
-          lastSeen = t;
-          saveLastSeen(projectId, lastSeen);
-        }
-      }
+    freshLogs.forEach(l => {
+      const userDisplayName = getUserDisplayName(l.user);
+      showToast(`${userDisplayName} đã ${l.action}.`);
     });
+
+    if (freshLogs.length > 0) {
+      const newest = freshLogs[freshLogs.length - 1];
+      lastSeen = newest.timestamp?.toDate ? newest.timestamp.toDate().getTime() : lastSeen;
+      saveLastSeen(projectId, lastSeen);
+    }
   });
 }
+
 
 // ===== Cấu hình và Helpers cho Deadline =====
 const DEADLINE_CFG = {
@@ -1120,6 +1143,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
