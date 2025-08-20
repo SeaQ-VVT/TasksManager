@@ -178,6 +178,7 @@ async function logAction(projectId, action, groupId = null) {
 }
 
 // Biến lưu trữ listener logs để có thể hủy khi đổi dự án
+// Biến lưu trữ listener logs để có thể hủy khi đổi dự án
 let logsUnsub = null;
 
 function listenForLogs(projectId) {
@@ -194,11 +195,13 @@ function listenForLogs(projectId) {
 
   logsUnsub = onSnapshot(q, (snapshot) => {
     const logEntries = document.getElementById("logEntries");
-    if (logEntries) {
-      const logs = [];
-      snapshot.forEach((doc) => logs.push(doc.data()));
-      logs.sort((a, b) => b.timestamp - a.timestamp);
+    const logs = [];
 
+    snapshot.forEach((doc) => logs.push(doc.data()));
+    logs.sort((a, b) => b.timestamp - a.timestamp);
+
+    // Render bảng log
+    if (logEntries) {
       logEntries.innerHTML = "";
       logs.forEach((data) => {
         const timestamp = data.timestamp?.toDate ? data.timestamp.toDate().toLocaleString() : "-";
@@ -209,11 +212,18 @@ function listenForLogs(projectId) {
       });
     }
 
+    // 🔹 Lần đầu vào: chỉ toast log mới nhất
     if (initial) {
       initial = false;
+      if (logs.length > 0) {
+        const newest = logs[0];
+        const userDisplayName = getUserDisplayName(newest.user);
+        showToast(`${userDisplayName} đã ${newest.action}.`);
+      }
       return;
     }
 
+    // 🔹 Sau đó: chỉ toast log mới được thêm
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added") {
         const data = change.doc.data();
@@ -223,6 +233,7 @@ function listenForLogs(projectId) {
     });
   });
 }
+
 
 // ===== Cấu hình và Helpers cho Deadline =====
 const DEADLINE_CFG = {
@@ -1016,6 +1027,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
