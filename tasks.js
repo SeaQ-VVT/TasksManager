@@ -702,60 +702,85 @@ function renderTask(docSnap) {
       e.dataTransfer.setData("taskId", tid);
     });
     
-    // Sự kiện chọn emoji
-    row.querySelector(".emoji-picker-btn").addEventListener("click", (e) => {
-      e.stopPropagation(); // Ngăn sự kiện drag
-      const emojiList = ["👍", "🎉", "🔥", "🤔", "👀", "🚀", "❤️", "💯", "✅", "⚠️", "❌"];
-      const picker = document.createElement('div');
-      picker.className = 'absolute z-10 bg-white shadow-lg rounded p-2 flex flex-wrap gap-1';
-      
-      // Lấy vị trí của nút emoji-picker-btn để đặt pop-up
-      const rect = e.target.getBoundingClientRect();
-      picker.style.top = `${rect.bottom + window.scrollY + 5}px`;
-      picker.style.left = `${rect.left + window.scrollX}px`;
-      
-      emojiList.forEach(emoji => {
-        const btn = document.createElement('button');
-        btn.textContent = emoji;
-        btn.className = 'hover:bg-gray-200 p-1 rounded';
-btn.onclick = async () => {
- // await updateDoc(doc(db, "tasks", tid), { emoji: emoji });
-  const userEmail = currentUser?.email || "Ẩn danh";
+// Sự kiện chọn emoji
+row.querySelector(".emoji-picker-btn").addEventListener("click", (e) => {
+  e.stopPropagation(); // Ngăn sự kiện drag
 
-// Lấy dữ liệu task hiện tại
-const taskRef = doc(db, "tasks", tid);
-const taskSnap = await getDoc(taskRef);
-const taskData = taskSnap.exists() ? taskSnap.data() : {};
+  // Danh sách emoji
+  const emojiList = ["👍", "🎉", "🔥", "🤔", "👀", "🚀", "❤️", "💯", "✅", "⚠️"];
 
-// Reactions hiện có
-let reactions = taskData.emoji || {};
+  const picker = document.createElement('div');
+  picker.className = 'absolute z-10 bg-white shadow-lg rounded p-2 flex flex-wrap gap-1';
 
-// Ghi đè reaction của user hiện tại
-reactions[userEmail] = emoji;
+  // Lấy vị trí của nút emoji-picker-btn để đặt pop-up
+  const rect = e.target.getBoundingClientRect();
+  picker.style.top = `${rect.bottom + window.scrollY + 5}px`;
+  picker.style.left = `${rect.left + window.scrollX}px`;
 
-// Cập nhật Firestore
-await updateDoc(taskRef, { emoji: reactions });
+  // 🔹 Render danh sách emoji
+  emojiList.forEach(emoji => {
+    const btn = document.createElement('button');
+    btn.textContent = emoji;
+    btn.className = 'hover:bg-gray-200 p-1 rounded';
+    btn.onclick = async () => {
+      const userEmail = currentUser?.email || "Ẩn danh";
 
-picker.remove();
+      // Lấy dữ liệu task hiện tại
+      const taskRef = doc(db, "tasks", tid);
+      const taskSnap = await getDoc(taskRef);
+      const taskData = taskSnap.exists() ? taskSnap.data() : {};
 
-// Ghi log
-await logAction(t.projectId, `thêm cảm xúc ${emoji} vào task "${t.title}"`, t.groupId);
+      // Reactions hiện có
+      let reactions = taskData.emoji || {};
 
-  /////////////////////////////////////////////////////////////////////
-  picker.remove();
+      // Ghi đè reaction của user hiện tại
+      reactions[userEmail] = emoji;
 
-  const userDisplayName = getUserDisplayName(currentUser?.email || "Ẩn danh");
+      // Cập nhật Firestore
+      await updateDoc(taskRef, { emoji: reactions });
+      picker.remove();
 
-  // Lấy thông tin group
-  const groupSnap = await getDoc(doc(db, "groups", t.groupId));
-  const groupData = groupSnap.exists() ? groupSnap.data() : { title: "Không rõ" };
+      // Ghi log
+      await logAction(t.projectId, `thêm cảm xúc ${emoji} vào task "${t.title}"`, t.groupId);
+    };
+    picker.appendChild(btn);
+  });
 
-  // 🔹 Thông báo nhanh
- // showToast(`${userDisplayName} thêm ${emoji} vào "${t.title}" (Group: ${groupData.title})`);
+  // 🔹 Thêm nút "Bỏ cảm xúc"
+  const removeBtn = document.createElement('button');
+  removeBtn.textContent = "Bỏ cảm xúc";
+  removeBtn.className = 'bg-red-100 hover:bg-red-200 text-red-600 px-2 py-1 rounded mt-2 w-full';
+  removeBtn.onclick = async () => {
+    const userEmail = currentUser?.email || "Ẩn danh";
 
-  // 🔹 Ghi vào log (giống style cũ)
-  //await logAction(t.projectId, `thêm cảm xúc ${emoji} vào task "${t.title}"`, t.groupId);
-};
+    const taskRef = doc(db, "tasks", tid);
+    const taskSnap = await getDoc(taskRef);
+    const taskData = taskSnap.exists() ? taskSnap.data() : {};
+
+    let reactions = taskData.emoji || {};
+
+    // ❌ Xoá cảm xúc của user
+    delete reactions[userEmail];
+
+    await updateDoc(taskRef, { emoji: reactions });
+    picker.remove();
+
+    await logAction(t.projectId, `bỏ cảm xúc khỏi task "${t.title}"`, t.groupId);
+  };
+  picker.appendChild(removeBtn);
+
+  document.body.appendChild(picker);
+
+  // 🔹 Đóng picker khi click ra ngoài
+  const outsideClick = (event) => {
+    if (!picker.contains(event.target) && event.target !== row.querySelector(".emoji-picker-btn")) {
+      picker.remove();
+      document.removeEventListener('click', outsideClick);
+    }
+  };
+  document.addEventListener('click', outsideClick);
+});
+
 
         picker.appendChild(btn);
       });
@@ -1055,6 +1080,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
