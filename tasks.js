@@ -227,7 +227,10 @@ function listenForLogs(projectId) {
         const userDisplayName = getUserDisplayName(data.user);
         const logItem = document.createElement("div");
         logItem.textContent = `[${timestamp}] ${userDisplayName} đã ${data.action}.`;
-        logEntries.appendChild(logItem);
+        //logEntries.appendChild(logItem);
+        
+        logEntries.prepend(logItem);
+        
       });
     }
 
