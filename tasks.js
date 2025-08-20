@@ -180,7 +180,7 @@ async function logAction(projectId, action, groupId = null) {
 // Biến lưu trữ listener logs để có thể hủy khi đổi dự án
 let logsUnsub = null;
 
-function listenForLogs(projectId) {
+async function listenForLogs(projectId) {
   // Hủy listener cũ để không bị nhận thông báo từ dự án khác
   if (logsUnsub) {
     logsUnsub();
@@ -188,33 +188,37 @@ function listenForLogs(projectId) {
   }
 
   const logsCol = collection(db, "logs");
-  const q = query(logsCol, where("projectId", "==", projectId));
+  const logEntries = document.getElementById("logEntries");
 
-  logsUnsub = onSnapshot(q, (snapshot) => {
-    // Luôn render toàn bộ log vào giao diện chính
-    const logEntries = document.getElementById("logEntries");
-    if (logEntries) {
-      const logs = [];
-      snapshot.forEach((doc) => logs.push(doc.data()));
-      logs.sort((a, b) => {
-        const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(0);
-        const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(0);
-        return dateB - dateA;
-      });
+  // PHẦN 1: Tải ngay toàn bộ log lịch sử và hiển thị lên giao diện
+  const allLogsQuery = query(logsCol, where("projectId", "==", projectId), orderBy("timestamp", "desc"));
+  const allLogsSnapshot = await getDocs(allLogsQuery);
 
-      logEntries.innerHTML = "";
-      logs.forEach((data) => {
-        const timestamp = data.timestamp?.toDate ? data.timestamp.toDate().toLocaleString() : "-";
-        const userDisplayName = getUserDisplayName(data.user);
-        const logItem = document.createElement("div");
-        logItem.textContent = `[${timestamp}] ${userDisplayName} đã ${data.action}.`;
-        logEntries.appendChild(logItem);
-      });
-    }
+  if (logEntries) {
+    const logs = [];
+    allLogsSnapshot.forEach((doc) => logs.push(doc.data()));
+    logEntries.innerHTML = "";
+    logs.forEach((data) => {
+      const timestamp = data.timestamp?.toDate ? data.timestamp.toDate().toLocaleString() : "-";
+      const userDisplayName = getUserDisplayName(data.user);
+      const logItem = document.createElement("div");
+      logItem.textContent = `[${timestamp}] ${userDisplayName} đã ${data.action}.`;
+      logEntries.appendChild(logItem);
+    });
+  }
 
-    // PHẦN SỬA LỖI:
-    // Duyệt qua các thay đổi và tạo thông báo cho tất cả các log được thêm vào
-    // Điều này sẽ bao gồm cả các log đã có trong lần tải đầu tiên
+  // Lấy timestamp của log mới nhất để làm mốc
+  const lastDoc = allLogsSnapshot.docs[0];
+  const lastTimestamp = lastDoc ? lastDoc.data().timestamp : new Date(0);
+
+  // PHẦN 2: Bắt đầu lắng nghe các thay đổi mới và chỉ tạo thông báo
+  const newLogsQuery = query(
+    logsCol,
+    where("projectId", "==", projectId),
+    where("timestamp", ">", lastTimestamp)
+  );
+
+  logsUnsub = onSnapshot(newLogsQuery, (snapshot) => {
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added") {
         const data = change.doc.data();
@@ -1016,6 +1020,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
