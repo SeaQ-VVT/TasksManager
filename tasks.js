@@ -194,7 +194,6 @@ async function logAction(projectId, action, groupId = null) {
 let logsUnsub = null;
 
 async function listenForLogs(projectId) {
-  // Hủy listener cũ để không bị nhận thông báo từ dự án khác
   if (logsUnsub) {
     logsUnsub();
     logsUnsub = null;
@@ -203,21 +202,17 @@ async function listenForLogs(projectId) {
   const userEmail = currentUser?.email || "Ẩn danh";
   const readRef = doc(db, "user_project_reads", `${userEmail}_${projectId}`);
 
-  // Lấy lastSeen cũ nếu có
-  const readSnap = await getDoc(readRef);
-  const lastSeen = readSnap.exists() ? readSnap.data().lastSeen?.toDate() : null;
-
   const logsCol = collection(db, "logs");
   const q = query(logsCol, where("projectId", "==", projectId));
 
-  logsUnsub = onSnapshot(q, (snapshot) => {
+  logsUnsub = onSnapshot(q, async (snapshot) => {
     const logEntries = document.getElementById("logEntries");
     const logs = [];
 
     snapshot.forEach((docSnap) => logs.push(docSnap.data()));
     logs.sort((a, b) => b.timestamp - a.timestamp);
 
-    // Render bảng log
+    // Render bảng log (cái bảng luôn hiển thị tất cả)
     if (logEntries) {
       logEntries.innerHTML = "";
       logs.forEach((data) => {
@@ -229,7 +224,11 @@ async function listenForLogs(projectId) {
       });
     }
 
-    // 🔹 Chỉ toast những log chưa xem
+    // 🔹 Lấy lastSeen mỗi lần có thay đổi
+    const readSnap = await getDoc(readRef);
+    const lastSeen = readSnap.exists() ? readSnap.data().lastSeen?.toDate() : null;
+
+    // 🔹 Lọc ra log mới hơn lastSeen
     const unread = [];
     snapshot.forEach((docSnap) => {
       const data = docSnap.data();
@@ -241,20 +240,20 @@ async function listenForLogs(projectId) {
 
     unread.sort((a, b) => a.timestamp - b.timestamp);
 
+    // Hiện toast cho log chưa xem
     unread.forEach((data) => {
       const userDisplayName = getUserDisplayName(data.user);
       showToast(`${userDisplayName} đã ${data.action}.`);
     });
 
-    // ✅ Cập nhật lastSeen (Firestore sẽ tự tạo nếu chưa có document)
-    setDoc(readRef, {
+    // 🔹 Cập nhật lại lastSeen ngay sau khi xử lý
+    await setDoc(readRef, {
       user: userEmail,
       projectId,
       lastSeen: serverTimestamp()
     }, { merge: true });
   });
 }
-
 
 // ===== Cấu hình và Helpers cho Deadline =====
 const DEADLINE_CFG = {
@@ -1107,6 +1106,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
