@@ -782,18 +782,7 @@ row.querySelector(".emoji-picker-btn").addEventListener("click", (e) => {
 });
 
 
-        picker.appendChild(btn);
-      });
-      document.body.appendChild(picker);
-      
-      const outsideClick = (event) => {
-        if (!picker.contains(event.target) && event.target !== row.querySelector(".emoji-picker-btn")) {
-          picker.remove();
-          document.removeEventListener('click', outsideClick);
-        }
-      };
-      document.addEventListener('click', outsideClick);
-    });
+
 
     // Sự kiện click nút sửa
     row.querySelector(".edit-task").addEventListener("click", () => {
@@ -1080,6 +1069,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
