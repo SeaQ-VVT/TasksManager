@@ -190,14 +190,16 @@ function listenForLogs(projectId) {
   const logsCol = collection(db, "logs");
   const q = query(logsCol, where("projectId", "==", projectId));
 
-  let initial = true;
-
   logsUnsub = onSnapshot(q, (snapshot) => {
     const logEntries = document.getElementById("logEntries");
     if (logEntries) {
       const logs = [];
       snapshot.forEach((doc) => logs.push(doc.data()));
-      logs.sort((a, b) => b.timestamp - a.timestamp);
+      logs.sort((a, b) => {
+        const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(0);
+        const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(0);
+        return dateB - dateA;
+      });
 
       logEntries.innerHTML = "";
       logs.forEach((data) => {
@@ -209,11 +211,7 @@ function listenForLogs(projectId) {
       });
     }
 
-    if (initial) {
-      initial = false;
-      return;
-    }
-
+    // Duyệt qua các thay đổi để chỉ tạo thông báo cho các log mới được thêm vào
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added") {
         const data = change.doc.data();
@@ -223,7 +221,6 @@ function listenForLogs(projectId) {
     });
   });
 }
-
 // ===== Cấu hình và Helpers cho Deadline =====
 const DEADLINE_CFG = {
   thresholds: [14, 7, 3], // <=14 cam, <=7 vàng, <=3 đỏ
@@ -1016,6 +1013,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
