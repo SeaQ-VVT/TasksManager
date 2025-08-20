@@ -719,7 +719,29 @@ function renderTask(docSnap) {
         btn.textContent = emoji;
         btn.className = 'hover:bg-gray-200 p-1 rounded';
 btn.onclick = async () => {
-  await updateDoc(doc(db, "tasks", tid), { emoji: emoji });
+ // await updateDoc(doc(db, "tasks", tid), { emoji: emoji });
+  const userEmail = currentUser?.email || "Ẩn danh";
+
+// Lấy dữ liệu task hiện tại
+const taskRef = doc(db, "tasks", tid);
+const taskSnap = await getDoc(taskRef);
+const taskData = taskSnap.exists() ? taskSnap.data() : {};
+
+// Reactions hiện có
+let reactions = taskData.emoji || {};
+
+// Ghi đè reaction của user hiện tại
+reactions[userEmail] = emoji;
+
+// Cập nhật Firestore
+await updateDoc(taskRef, { emoji: reactions });
+
+picker.remove();
+
+// Ghi log
+await logAction(t.projectId, `thêm cảm xúc ${emoji} vào task "${t.title}"`, t.groupId);
+
+  /////////////////////////////////////////////////////////////////////
   picker.remove();
 
   const userDisplayName = getUserDisplayName(currentUser?.email || "Ẩn danh");
@@ -835,10 +857,16 @@ btn.onclick = async () => {
   }
   
   // Cập nhật emoji
-  const emojiSpan = row.querySelector(`#task-emoji-${tid}`);
-  if (emojiSpan) {
+const emojiSpan = row.querySelector(`#task-emoji-${tid}`);
+if (emojiSpan) {
+  if (t.emoji && typeof t.emoji === "object") {
+    // Hiển thị tất cả emoji của mọi user
+    emojiSpan.textContent = Object.values(t.emoji).join(" ");
+  } else {
     emojiSpan.textContent = t.emoji || '';
   }
+}
+
 
   const progressBar = row.querySelector(`#progress-container-${tid} div`);
   if (progressBar) {
@@ -1027,6 +1055,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
