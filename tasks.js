@@ -211,7 +211,7 @@ function listenForLogs(projectId) {
 
     if (initial) {
       initial = false;
-      return;
+     // return;
     }
 
     snapshot.docChanges().forEach((change) => {
@@ -1016,6 +1016,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
