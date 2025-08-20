@@ -17,7 +17,8 @@ import {
   deleteDoc,
   updateDoc,
   serverTimestamp,
-  deleteField
+  deleteField,
+  increment
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
@@ -571,7 +572,7 @@ function renderGroup(docSnap) {
   loadTasks(gid);
 
   // Thêm sự kiện cho các nút
-  div.querySelector(".add-task").addEventListener("click", () => openTaskModal(gid, g.projectId));
+  div.querySelector(".add-task").addEventListener("click", () => addGroup(gid, g.projectId));
   div.querySelector(".edit-group").addEventListener("click", () => editGroup(gid, g));
   div.querySelector(".delete-group").addEventListener("click", () => deleteGroup(gid, g));
 }
@@ -637,6 +638,21 @@ function renderTask(docSnap) {
   el.className = "bg-white p-2 border rounded-md shadow-sm cursor-pointer hover:shadow-md transition-shadow duration-200";
   el.draggable = true;
   el.setAttribute("data-task-id", tid);
+  
+  // Hiển thị các biểu tượng cảm xúc
+  let reactionsHtml = "";
+  if (task.reactions) {
+    for (const [reaction, users] of Object.entries(task.reactions)) {
+      if (users.length > 0) {
+        reactionsHtml += `
+          <div class="flex items-center space-x-1 text-xs px-2 py-1 bg-gray-200 rounded-full reaction-count cursor-pointer" data-reaction-emoji="${reaction}">
+            <span>${reaction}</span>
+            <span>${users.length}</span>
+          </div>`;
+      }
+    }
+  }
+
   el.innerHTML = `
     <div class="flex justify-between items-center mb-1">
       <span class="font-medium text-gray-800">${task.title}</span>
@@ -647,9 +663,17 @@ function renderTask(docSnap) {
     <div class="w-full bg-gray-200 rounded-full h-1">
       <div class="bg-blue-500 h-1 rounded-full transition-all duration-300" style="width: ${task.progress}%;"></div>
     </div>
-    <div class="flex items-center mt-2 space-x-2 text-gray-500 text-sm">
-      <button class="edit-task text-yellow-600 hover:text-yellow-700" title="Sửa task">✏️</button>
-      <button class="delete-task text-red-600 hover:text-red-700" title="Xóa task">🗑️</button>
+    <div class="flex items-center justify-between mt-2 space-x-2 text-gray-500 text-sm">
+        <div class="flex space-x-2">
+            <button class="add-reaction text-gray-500 hover:text-gray-700" title="Thêm biểu tượng cảm xúc">❤️</button>
+            <div class="flex space-x-1 reactions-container">
+                ${reactionsHtml}
+            </div>
+        </div>
+        <div class="flex space-x-2">
+          <button class="edit-task text-yellow-600 hover:text-yellow-700" title="Sửa task">✏️</button>
+          <button class="delete-task text-red-600 hover:text-red-700" title="Xóa task">🗑️</button>
+        </div>
     </div>
   `;
   document.getElementById(`tasks-${task.groupId}`).appendChild(el);
@@ -663,6 +687,21 @@ function renderTask(docSnap) {
     e.stopPropagation();
     deleteTask(tid, task);
   });
+  
+  // Thêm sự kiện cho nút thêm reaction
+  el.querySelector(".add-reaction").addEventListener("click", (e) => {
+    e.stopPropagation();
+    updateReaction(tid, task, "❤️");
+  });
+  
+  // Thêm sự kiện cho các reaction đã có
+  el.querySelectorAll(".reaction-count").forEach(reactionEl => {
+      reactionEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const emoji = e.currentTarget.getAttribute("data-reaction-emoji");
+          updateReaction(tid, task, emoji);
+      });
+  });
 }
 
 function renderTaskInColumn(task, container, isNew) {
@@ -672,6 +711,21 @@ function renderTaskInColumn(task, container, isNew) {
   el.className = "bg-white p-2 border rounded-md shadow-sm cursor-pointer hover:shadow-md transition-shadow duration-200";
   el.draggable = true;
   el.setAttribute("data-task-id", task.id);
+  
+  // Hiển thị các biểu tượng cảm xúc
+  let reactionsHtml = "";
+  if (task.reactions) {
+    for (const [reaction, users] of Object.entries(task.reactions)) {
+      if (users.length > 0) {
+        reactionsHtml += `
+          <div class="flex items-center space-x-1 text-xs px-2 py-1 bg-gray-200 rounded-full reaction-count cursor-pointer" data-reaction-emoji="${reaction}">
+            <span>${reaction}</span>
+            <span>${users.length}</span>
+          </div>`;
+      }
+    }
+  }
+
   el.innerHTML = `
     <div class="flex justify-between items-center mb-1">
       <span class="font-medium text-gray-800">${task.title}</span>
@@ -682,9 +736,17 @@ function renderTaskInColumn(task, container, isNew) {
     <div class="w-full bg-gray-200 rounded-full h-1">
       <div class="bg-blue-500 h-1 rounded-full transition-all duration-300" style="width: ${task.progress}%;"></div>
     </div>
-    <div class="flex items-center mt-2 space-x-2 text-gray-500 text-sm">
-      <button class="edit-task text-yellow-600 hover:text-yellow-700" title="Sửa task">✏️</button>
-      <button class="delete-task text-red-600 hover:text-red-700" title="Xóa task">🗑️</button>
+    <div class="flex items-center justify-between mt-2 space-x-2 text-gray-500 text-sm">
+        <div class="flex space-x-2">
+            <button class="add-reaction text-gray-500 hover:text-gray-700" title="Thêm biểu tượng cảm xúc">❤️</button>
+            <div class="flex space-x-1 reactions-container">
+                ${reactionsHtml}
+            </div>
+        </div>
+        <div class="flex space-x-2">
+          <button class="edit-task text-yellow-600 hover:text-yellow-700" title="Sửa task">✏️</button>
+          <button class="delete-task text-red-600 hover:text-red-700" title="Xóa task">🗑️</button>
+        </div>
     </div>
   `;
   container.appendChild(el);
@@ -698,8 +760,58 @@ function renderTaskInColumn(task, container, isNew) {
     e.stopPropagation();
     deleteTask(task.id, task);
   });
+  
+  // Thêm sự kiện cho nút thêm reaction
+  el.querySelector(".add-reaction").addEventListener("click", (e) => {
+    e.stopPropagation();
+    updateReaction(task.id, task, "❤️");
+  });
+  
+  // Thêm sự kiện cho các reaction đã có
+  el.querySelectorAll(".reaction-count").forEach(reactionEl => {
+      reactionEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const emoji = e.currentTarget.getAttribute("data-reaction-emoji");
+          updateReaction(task.id, task, emoji);
+      });
+  });
 }
 
+// Cập nhật reaction cho task
+async function updateReaction(tid, taskData, emoji) {
+    if (!isAuthReady) return showToast("Vui lòng đợi hệ thống xác thực.");
+    
+    const taskRef = doc(db, "tasks", tid);
+    const userEmail = currentUser?.email || "Ẩn danh";
+    const currentReactions = taskData.reactions || {};
+    
+    // Tìm xem người dùng đã react với emoji này chưa
+    const hasReacted = currentReactions[emoji] && currentReactions[emoji].includes(userEmail);
+    
+    if (hasReacted) {
+        // Nếu đã react, xóa reaction
+        const updatedUsers = currentReactions[emoji].filter(email => email !== userEmail);
+        if (updatedUsers.length > 0) {
+            await updateDoc(taskRef, {
+                [`reactions.${emoji}`]: updatedUsers
+            });
+        } else {
+            await updateDoc(taskRef, {
+                [`reactions.${emoji}`]: deleteField()
+            });
+        }
+        await logAction(taskData.projectId, `bỏ biểu tượng cảm xúc "${emoji}" khỏi task "${taskData.title}"`, taskData.groupId);
+        showToast(`Đã bỏ biểu tượng cảm xúc ${emoji}`);
+    } else {
+        // Nếu chưa react, thêm reaction
+        const updatedUsers = [...(currentReactions[emoji] || []), userEmail];
+        await updateDoc(taskRef, {
+            [`reactions.${emoji}`]: updatedUsers
+        });
+        await logAction(taskData.projectId, `thêm biểu tượng cảm xúc "${emoji}" vào task "${taskData.title}"`, taskData.groupId);
+        showToast(`Đã thêm biểu tượng cảm xúc ${emoji}`);
+    }
+}
 
 // ===== CRUD Operations =====
 async function addGroup(projectId) {
