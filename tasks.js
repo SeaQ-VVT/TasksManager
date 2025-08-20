@@ -823,6 +823,15 @@ row.querySelector(".emoji-picker-btn").addEventListener("click", (e) => {
         } else {
             updatePayload.deadline = deleteField();
         }
+        // Check deadline Task <= Group
+const gRef = doc(db, "groups", t.groupId);
+const gSnap = await getDoc(gRef);
+const gDeadline = gSnap.exists() ? gSnap.data().deadline : null;
+
+if (gDeadline && newDeadline && newDeadline > gDeadline) {
+  alert("❌ Deadline của Task không thể vượt quá deadline của Group!");
+  return;
+}
 
         await updateDoc(doc(db, "tasks", tid), updatePayload);
 
@@ -1099,6 +1108,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
