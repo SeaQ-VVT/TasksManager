@@ -351,6 +351,9 @@ export function showTaskBoard(projectId, projectTitle) {
         <h3 class="font-bold text-gray-800 mb-2">Tiến độ tổng thể dự án</h3>
         <canvas id="project-progress-chart" class="w-full h-64"></canvas>
     </div>
+        <div class="mt-8 p-4 bg-gray-200 rounded-lg text-center text-blue-500">
+      &copy; 2025 Tên Công ty Của Bạn. Mọi quyền được bảo lưu.
+    </div>
   `;
 
   // Thêm Chart.js CDN
@@ -1117,6 +1120,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
