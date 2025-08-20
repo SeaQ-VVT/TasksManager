@@ -190,9 +190,6 @@ function listenForLogs(projectId) {
   const logsCol = collection(db, "logs");
   const q = query(logsCol, where("projectId", "==", projectId));
 
-  // Thêm biến cờ để kiểm tra lần chạy đầu tiên của onSnapshot
-  let isInitialLoad = true;
-
   logsUnsub = onSnapshot(q, (snapshot) => {
     // Luôn render toàn bộ log vào giao diện chính
     const logEntries = document.getElementById("logEntries");
@@ -213,12 +210,6 @@ function listenForLogs(projectId) {
         logItem.textContent = `[${timestamp}] ${userDisplayName} đã ${data.action}.`;
         logEntries.appendChild(logItem);
       });
-    }
-
-    // Nếu đây là lần đầu tiên tải, KHÔNG hiển thị thông báo.
-    if (isInitialLoad) {
-      isInitialLoad = false;
-      return;
     }
 
     // Duyệt qua các thay đổi để chỉ tạo thông báo cho các log mới được thêm vào
@@ -1023,6 +1014,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
