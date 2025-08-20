@@ -180,7 +180,7 @@ async function logAction(projectId, action, groupId = null) {
 // Biến lưu trữ listener logs để có thể hủy khi đổi dự án
 let logsUnsub = null;
 
-async function listenForLogs(projectId) {
+function listenForLogs(projectId) {
   // Hủy listener cũ để không bị nhận thông báo từ dự án khác
   if (logsUnsub) {
     logsUnsub();
@@ -188,37 +188,32 @@ async function listenForLogs(projectId) {
   }
 
   const logsCol = collection(db, "logs");
-  const logEntries = document.getElementById("logEntries");
+  const q = query(logsCol, where("projectId", "==", projectId));
 
-  // PHẦN 1: Tải ngay toàn bộ log lịch sử và hiển thị lên giao diện
-  const allLogsQuery = query(logsCol, where("projectId", "==", projectId), orderBy("timestamp", "desc"));
-  const allLogsSnapshot = await getDocs(allLogsQuery);
+  let initial = true;
 
-  if (logEntries) {
-    const logs = [];
-    allLogsSnapshot.forEach((doc) => logs.push(doc.data()));
-    logEntries.innerHTML = "";
-    logs.forEach((data) => {
-      const timestamp = data.timestamp?.toDate ? data.timestamp.toDate().toLocaleString() : "-";
-      const userDisplayName = getUserDisplayName(data.user);
-      const logItem = document.createElement("div");
-      logItem.textContent = `[${timestamp}] ${userDisplayName} đã ${data.action}.`;
-      logEntries.appendChild(logItem);
-    });
-  }
+  logsUnsub = onSnapshot(q, (snapshot) => {
+    const logEntries = document.getElementById("logEntries");
+    if (logEntries) {
+      const logs = [];
+      snapshot.forEach((doc) => logs.push(doc.data()));
+      logs.sort((a, b) => b.timestamp - a.timestamp);
 
-  // Lấy timestamp của log mới nhất để làm mốc
-  const lastDoc = allLogsSnapshot.docs[0];
-  const lastTimestamp = lastDoc ? lastDoc.data().timestamp : new Date(0);
+      logEntries.innerHTML = "";
+      logs.forEach((data) => {
+        const timestamp = data.timestamp?.toDate ? data.timestamp.toDate().toLocaleString() : "-";
+        const userDisplayName = getUserDisplayName(data.user);
+        const logItem = document.createElement("div");
+        logItem.textContent = `[${timestamp}] ${userDisplayName} đã ${data.action}.`;
+        logEntries.appendChild(logItem);
+      });
+    }
 
-  // PHẦN 2: Bắt đầu lắng nghe các thay đổi mới và chỉ tạo thông báo
-  const newLogsQuery = query(
-    logsCol,
-    where("projectId", "==", projectId),
-    where("timestamp", ">", lastTimestamp)
-  );
+    if (initial) {
+      initial = false;
+      return;
+    }
 
-  logsUnsub = onSnapshot(newLogsQuery, (snapshot) => {
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added") {
         const data = change.doc.data();
@@ -228,6 +223,7 @@ async function listenForLogs(projectId) {
     });
   });
 }
+
 // ===== Cấu hình và Helpers cho Deadline =====
 const DEADLINE_CFG = {
   thresholds: [14, 7, 3], // <=14 cam, <=7 vàng, <=3 đỏ
@@ -1020,14 +1016,6 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
-
-
-
-
-
-
-
-
 
 
 
