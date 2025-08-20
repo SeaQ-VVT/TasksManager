@@ -43,31 +43,6 @@
     @supports(padding: max(0px)) {
       .nav-bar { padding-top: max(1rem, env(safe-area-inset-top)); }
     }
-
-    /* Styles for the falling flowers */
-    .flower {
-        position: absolute;
-        top: 0;
-        left: 0;
-        pointer-events: none;
-        user-select: none;
-        z-index: 999;
-        font-size: 20px;
-        color: #ffc0cb; /* A soft pink color */
-        text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
-        animation: flower-fall linear infinite;
-    }
-
-    @keyframes flower-fall {
-        from {
-            transform: translateY(-20vh) rotate(0deg);
-            opacity: 1;
-        }
-        to {
-            transform: translateY(100vh) rotate(720deg);
-            opacity: 0;
-        }
-    }
   </style>
 </head>
 
@@ -399,35 +374,6 @@ const firebaseConfig = {
       navBar.addEventListener('mouseenter', () => showNav(3000));
       navBar.addEventListener('mouseleave', hideNav);
     }
-
-    // ==== Falling Flowers Effect ====
-    document.addEventListener('DOMContentLoaded', () => {
-        const container = document.body;
-        const numFlowers = 30;
-        const flowerTypes = ['🌸', '🌺', '🌼', '🌷']; // You can use other emojis or characters
-
-        function createFlower() {
-            const flower = document.createElement('span');
-            flower.className = 'flower';
-            flower.textContent = flowerTypes[Math.floor(Math.random() * flowerTypes.length)];
-            const size = Math.random() * 20 + 10;
-            flower.style.fontSize = `${size}px`;
-            flower.style.left = `${Math.random() * 100}vw`;
-            flower.style.animationDuration = `${Math.random() * 5 + 5}s`;
-            flower.style.animationDelay = `${Math.random() * 3}s`;
-            container.appendChild(flower);
-
-            flower.addEventListener('animationend', () => {
-                flower.remove();
-                createFlower();
-            });
-        }
-
-        for (let i = 0; i < numFlowers; i++) {
-            createFlower();
-        }
-    });
-
   </script>
 
   <!-- Modules -->
@@ -435,3 +381,6 @@ const firebaseConfig = {
   <script type="module" src="tasks.js"></script>
 </body>
 </html>
+
+
+
