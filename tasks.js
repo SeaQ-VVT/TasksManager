@@ -352,7 +352,7 @@ export function showTaskBoard(projectId, projectTitle) {
         <canvas id="project-progress-chart" class="w-full h-64"></canvas>
     </div>
         <div class="mt-8 p-4 bg-gray-200 rounded-lg text-center text-blue-500">
-      &copy; 2025 Tên Công ty Của Bạn. Mọi quyền được bảo lưu.
+      &copy; Thiết kế bỡi: Nguyễn Văn Yên.
     </div>
   `;
 
@@ -1120,6 +1120,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
