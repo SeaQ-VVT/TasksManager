@@ -198,10 +198,10 @@ async function listenForLogs(projectId) {
     logsUnsub = null;
   }
 
-  const userEmail = currentUser?.email || "guest"; // tránh chữ "Ẩn danh" gây lỗi ID
+  const userEmail = currentUser?.email || "guest"; 
   const readRef = doc(db, "user_project_reads", `${userEmail}_${projectId}`);
 
-  // Ghi ngay lastSeen khi mở dự án (đảm bảo tạo doc)
+  // 🔹 Ghi doc ngay khi mở dự án để chắc chắn tạo ra
   await setDoc(readRef, {
     user: userEmail,
     projectId,
@@ -230,27 +230,23 @@ async function listenForLogs(projectId) {
       });
     }
 
-    // Lọc log chưa xem
+    // 🔹 Lấy lastSeen mới nhất từ Firestore
     const readSnap = await getDoc(readRef);
     const lastSeen = readSnap.exists() ? readSnap.data().lastSeen?.toDate() : null;
 
-    const unread = [];
+    // 🔹 Chỉ toast log mới hơn lastSeen
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added") {
         const data = change.doc.data();
         const ts = data.timestamp?.toDate();
         if (!lastSeen || (ts && ts > lastSeen)) {
-          unread.push(data);
+          const userDisplayName = getUserDisplayName(data.user);
+          showToast(`${userDisplayName} đã ${data.action}.`);
         }
       }
     });
 
-    unread.forEach((data) => {
-      const userDisplayName = getUserDisplayName(data.user);
-      showToast(`${userDisplayName} đã ${data.action}.`);
-    });
-
-    // update lastSeen mỗi lần snapshot bắn
+    // 🔹 Update lại lastSeen
     await setDoc(readRef, {
       user: userEmail,
       projectId,
@@ -1110,6 +1106,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
