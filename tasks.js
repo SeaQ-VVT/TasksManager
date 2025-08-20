@@ -211,6 +211,7 @@ function listenForLogs(projectId) {
       });
     }
 
+    // === Đây là phần thay đổi để không thông báo khi tải lần đầu ===
     // Nếu đây là lần tải đầu tiên, chỉ cập nhật danh sách đã xem và không hiển thị toast
     if (firstLoad) {
       snapshot.docs.forEach(doc => seenDocIds.add(doc.id));
@@ -666,7 +667,6 @@ function renderTask(docSnap) {
 
 function renderTaskInColumn(task, container, isNew) {
   if (!container) return;
-
   const el = document.createElement("div");
   el.id = `task-${task.id}`;
   el.className = "bg-white p-2 border rounded-md shadow-sm cursor-pointer hover:shadow-md transition-shadow duration-200";
@@ -888,6 +888,7 @@ function setupDragDrop() {
       const taskSnap = await getDoc(taskRef);
       if (!taskSnap.exists()) return;
       const taskData = taskSnap.data();
+      const groupData = (await getDoc(doc(db, "groups", taskData.groupId))).data();
 
       // Cập nhật trạng thái và tiến độ
       const updatePayload = {
@@ -907,8 +908,8 @@ function setupDragDrop() {
       if (newStatus === "done") {
         logMessage += ` và hoàn thành 100%`;
       }
-      logMessage += ` trong group "${taskData.groupId}"`; // Sử dụng trực tiếp groupId từ taskData
-      await logAction(taskData.projectId, logMessage, taskData.groupId);
+      logMessage += ` trong group "${groupData.title}"`;
+      await logAction(taskData.projectId, logMessage);
     });
   });
 }
