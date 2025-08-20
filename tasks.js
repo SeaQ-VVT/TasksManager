@@ -191,26 +191,30 @@ async function logAction(projectId, action, groupId = null) {
 }
 
 // Biến lưu trữ listener logs để có thể hủy khi đổi dự án
-// Biến lưu trữ listener logs để có thể hủy khi đổi dự án
 let logsUnsub = null;
 
-function listenForLogs(projectId) {
+async function listenForLogs(projectId) {
   // Hủy listener cũ để không bị nhận thông báo từ dự án khác
   if (logsUnsub) {
     logsUnsub();
     logsUnsub = null;
   }
 
+  const userEmail = currentUser?.email || "Ẩn danh";
+  const readRef = doc(db, "user_project_reads", `${userEmail}_${projectId}`);
+
+  // Lấy lastSeen cũ nếu có
+  const readSnap = await getDoc(readRef);
+  const lastSeen = readSnap.exists() ? readSnap.data().lastSeen?.toDate() : null;
+
   const logsCol = collection(db, "logs");
   const q = query(logsCol, where("projectId", "==", projectId));
-
-  let initial = true;
 
   logsUnsub = onSnapshot(q, (snapshot) => {
     const logEntries = document.getElementById("logEntries");
     const logs = [];
 
-    snapshot.forEach((doc) => logs.push(doc.data()));
+    snapshot.forEach((docSnap) => logs.push(docSnap.data()));
     logs.sort((a, b) => b.timestamp - a.timestamp);
 
     // Render bảng log
@@ -225,25 +229,29 @@ function listenForLogs(projectId) {
       });
     }
 
-    // 🔹 Lần đầu vào: chỉ toast log mới nhất
-    if (initial) {
-      initial = false;
-      if (logs.length > 0) {
-        const newest = logs[0];
-        const userDisplayName = getUserDisplayName(newest.user);
-        showToast(`${userDisplayName} đã ${newest.action}.`);
-      }
-      return;
-    }
-
-    // 🔹 Sau đó: chỉ toast log mới được thêm
-    snapshot.docChanges().forEach((change) => {
-      if (change.type === "added") {
-        const data = change.doc.data();
-        const userDisplayName = getUserDisplayName(data.user);
-        showToast(`${userDisplayName} đã ${data.action}.`);
+    // 🔹 Chỉ toast những log chưa xem
+    const unread = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      const ts = data.timestamp?.toDate();
+      if (!lastSeen || (ts && ts > lastSeen)) {
+        unread.push(data);
       }
     });
+
+    unread.sort((a, b) => a.timestamp - b.timestamp);
+
+    unread.forEach((data) => {
+      const userDisplayName = getUserDisplayName(data.user);
+      showToast(`${userDisplayName} đã ${data.action}.`);
+    });
+
+    // ✅ Cập nhật lastSeen (Firestore sẽ tự tạo nếu chưa có document)
+    setDoc(readRef, {
+      user: userEmail,
+      projectId,
+      lastSeen: serverTimestamp()
+    }, { merge: true });
   });
 }
 
@@ -1099,6 +1107,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
