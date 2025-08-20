@@ -68,6 +68,29 @@
             opacity: 0;
         }
     }
+@keyframes swim-across {
+  from {
+    transform: translateX(-10vw) translateY(var(--randY)) rotate(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(110vw) translateY(var(--randY)) rotate(360deg);
+    opacity: 0.9;
+  }
+}
+.fish {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  user-select: none;
+  z-index: 999;
+  font-size: 40px; /* chỉnh size cá to/nhỏ */
+  animation: swim-across linear infinite;
+}
+
+
+    
   </style>
 </head>
 
@@ -405,6 +428,7 @@ const firebaseConfig = {
         const container = document.body;
         const numFlowers = 30;
         const flowerTypes = ['🌸', '🌺', '🌼', '🌷']; // You can use other emojis or characters
+        const flowerTypes = ['🐬','🐳','🐟','🐠','🦑','🐙','🦈','🐋','🪸','🌊'];
 
         function createFlower() {
             const flower = document.createElement('span');
@@ -435,3 +459,4 @@ const firebaseConfig = {
   <script type="module" src="tasks.js"></script>
 </body>
 </html>
+
