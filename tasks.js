@@ -190,14 +190,18 @@ function listenForLogs(projectId) {
   const logsCol = collection(db, "logs");
   const q = query(logsCol, where("projectId", "==", projectId));
 
-  let initial = true;
+  let initialLoad = true; // Thêm biến cờ mới để kiểm soát lần tải đầu tiên
 
   logsUnsub = onSnapshot(q, (snapshot) => {
     const logEntries = document.getElementById("logEntries");
     if (logEntries) {
       const logs = [];
       snapshot.forEach((doc) => logs.push(doc.data()));
-      logs.sort((a, b) => b.timestamp - a.timestamp);
+      logs.sort((a, b) => {
+        const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(0);
+        const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(0);
+        return dateB - dateA;
+      });
 
       logEntries.innerHTML = "";
       logs.forEach((data) => {
@@ -209,18 +213,19 @@ function listenForLogs(projectId) {
       });
     }
 
-    if (initial) {
-      initial = false;
-      return;
+    // Chỉ hiển thị toast cho các thay đổi mới (khi không phải lần tải đầu)
+    if (!initialLoad) {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === "added") {
+          const data = change.doc.data();
+          const userDisplayName = getUserDisplayName(data.user);
+          showToast(`${userDisplayName} đã ${data.action}.`);
+        }
+      });
     }
 
-    snapshot.docChanges().forEach((change) => {
-      if (change.type === "added") {
-        const data = change.doc.data();
-        const userDisplayName = getUserDisplayName(data.user);
-        showToast(`${userDisplayName} đã ${data.action}.`);
-      }
-    });
+    // Đánh dấu lần tải đầu tiên đã hoàn thành
+    initialLoad = false;
   });
 }
 
@@ -490,24 +495,19 @@ function loadGroups(projectId) {
     groupsUnsub();
     groupsUnsub = null;
   }
-
   const groupsCol = collection(db, "groups");
   const qGroups = query(groupsCol, where("projectId", "==", projectId));
-
   groupsUnsub = onSnapshot(qGroups, (snapshot) => {
     const groupContainer = document.getElementById("groupContainer");
     const inprogressCol = document.getElementById("inprogressCol");
     const doneCol = document.getElementById("doneCol");
-
     // Xóa toàn bộ nội dung cũ để render lại từ đầu
     groupContainer.innerHTML = "";
     inprogressCol.innerHTML = "";
     doneCol.innerHTML = "";
-
     snapshot.forEach((docSnap) => {
       const gid = docSnap.id;
       const g = docSnap.data();
-
       // Hiển thị phần "In Progress"
       const ipSection = document.createElement("div");
       ipSection.className = "border rounded p-2 bg-gray-50 shadow";
@@ -518,7 +518,6 @@ function loadGroups(projectId) {
         <div id="inprogress-${gid}" class="space-y-1 mt-2 min-h-[30px]"></div>
       `;
       inprogressCol.appendChild(ipSection);
-
       // Hiển thị phần "Done"
       const doneSection = document.createElement("div");
       doneSection.className = "border rounded p-2 bg-gray-50 shadow";
@@ -529,10 +528,8 @@ function loadGroups(projectId) {
         <div id="done-${gid}" class="space-y-1 mt-2 min-h-[30px]"></div>
       `;
       doneCol.appendChild(doneSection);
-
       // Hiển thị thẻ Group ở cột To Do
       renderGroup(docSnap);
-
       // Áp màu cảnh báo dựa trên deadline và trạng thái
       applyGroupColor(gid, g);
     });
@@ -543,13 +540,10 @@ function loadGroups(projectId) {
 function renderGroup(docSnap) {
   const g = docSnap.data();
   const gid = docSnap.id;
-
   const div = document.createElement("div");
   div.className = "border rounded p-2 bg-gray-50 shadow";
   div.id = `group-${gid}`;
-
   const deadlineText = g.deadline ? `<span class="text-xs text-gray-500 ml-2">⏰ ${formatDateVN(g.deadline)}</span>` : "";
-
   div.innerHTML = `
     <div class="flex justify-between items-center">
       <span class="font-semibold text-blue-700">${g.title}${deadlineText}</span>
@@ -560,7 +554,6 @@ function renderGroup(docSnap) {
     </div>
     <button class="add-task text-green-600 text-xs mt-1 hover:text-green-700">+ Task</button>
     <div id="tasks-${gid}" class="space-y-1 mt-2"></div>
-    
     <div class="progress-bar-container mt-4" id="group-progress-container-${gid}">
       <div class="flex items-center mb-1">
         <span class="text-sm font-semibold text-gray-700 mr-2">Tiến độ nhóm:</span>
@@ -571,7 +564,6 @@ function renderGroup(docSnap) {
       </div>
     </div>
   `;
-
   document.getElementById("groupContainer").appendChild(div);
 
   // Tải các task con của group này
@@ -588,403 +580,148 @@ function renderGroup(docSnap) {
 function loadTasks(groupId) {
   const tasksCol = collection(db, "tasks");
   const qTasks = query(tasksCol, where("groupId", "==", groupId));
-
   onSnapshot(qTasks, async (snapshot) => {
     const tasks = [];
     let totalProgress = 0;
-    
     snapshot.forEach((d) => {
       const taskData = d.data();
       tasks.push({ id: d.id, ...taskData });
       totalProgress += taskData.progress || 0;
     });
-    
+
     const groupProgress = tasks.length > 0 ? Math.round(totalProgress / tasks.length) : 0;
     
     // Cập nhật biểu đồ tiến độ nhóm
     const groupProgressBar = document.getElementById(`group-progress-bar-${groupId}`);
     const groupProgressValue = document.getElementById(`group-progress-value-${groupId}`);
-    
     if (groupProgressBar && groupProgressValue) {
       groupProgressBar.style.width = `${groupProgress}%`;
       groupProgressValue.textContent = `${groupProgress}%`;
     }
-
+    
     // Duyệt qua các thay đổi để cập nhật giao diện
     snapshot.docChanges().forEach((change) => {
       const docSnap = change.doc;
       const tid = docSnap.id;
-
       const oldElement = document.getElementById(`task-${tid}`);
       if (oldElement) oldElement.remove();
 
       if (change.type === "added" || change.type === "modified") {
-        renderTask(docSnap);
-      }
-    });
+        const taskData = docSnap.data();
+        const element = document.createElement("div");
+        element.id = `task-${tid}`;
+        element.className = "bg-white p-2 rounded shadow text-sm cursor-grab border-l-4";
+        element.draggable = true;
+        element.style.borderColor = taskData.color || "#000";
 
-    // Cập nhật trạng thái của Group dựa trên trạng thái của các Task
-    let newStatus = "todo";
-    const hasAny = tasks.length > 0;
-    if (hasAny && tasks.some(t => t.status === "inprogress")) newStatus = "inprogress";
-    else if (hasAny && tasks.every(t => t.status === "done")) newStatus = "done";
+        const deadlineText = taskData.deadline ? `<span class="text-xs text-gray-500 ml-2">⏰ ${formatDateVN(taskData.deadline)}</span>` : "";
 
-    const gRef = doc(db, "groups", groupId);
-    const gSnap = await getDoc(gRef);
-    const gData = gSnap.exists() ? gSnap.data() : {};
-
-    if (gData.status !== newStatus) {
-      await updateDoc(gRef, { status: newStatus, updatedAt: serverTimestamp() });
-    }
-
-    // Áp dụng lại màu cảnh báo sau khi trạng thái thay đổi
-    applyGroupColor(groupId, { ...gData, status: newStatus });
-  });
-}
-
-// ===== Render task row (từng thẻ task) =====
-function renderTask(docSnap) {
-  const t = docSnap.data();
-  const tid = docSnap.id;
-
-  // Xác định cột để đặt task dựa trên trạng thái của nó
-  let colId;
-  if (t.status === "todo") colId = `tasks-${t.groupId}`;
-  else if (t.status === "inprogress") colId = `inprogress-${t.groupId}`;
-  else if (t.status === "done") colId = `done-${t.groupId}`;
-
-  const col = document.getElementById(colId);
-  if (!col) return;
-
-  let row = document.getElementById(`task-${tid}`);
-  if (!row) {
-    row = document.createElement("div");
-    row.id = `task-${tid}`;
-    row.className = "flex flex-col bg-gray-100 p-2 rounded-md text-sm cursor-move shadow-sm hover:shadow transition-shadow";
-    row.style.borderLeft = `4px solid ${t.color || '#e5e7eb'}`;
-    row.draggable = true;
-
-    row.innerHTML = `
-      <div class="flex justify-between items-center w-full">
-        <div class="flex items-center">
-            <span class="truncate font-medium">${t.title}</span>
-            <span id="task-emoji-${tid}" class="ml-1">${t.emoji || ''}</span>
-        </div>
-        <div class="space-x-1 flex-shrink-0">
-          <button class="emoji-picker-btn text-gray-400 hover:text-yellow-600" title="Chọn cảm xúc">🙂</button>
-          <button class="edit-task text-yellow-600 hover:text-yellow-700" title="Sửa">✏️</button>
-          <button class="comment-task text-gray-400 hover:text-blue-600" title="Comment">💬</button>
-          <button class="delete-task text-red-600 hover:text-red-700" title="Xóa">🗑️</button>
-        </div>
-      </div>
-      <div id="task-info-${tid}" class="flex items-center text-xs text-gray-500 mt-1">
+        element.innerHTML = `
+          <div class="flex justify-between items-center">
+            <span class="font-semibold text-gray-800">${taskData.title}</span>
+            <div class="flex-shrink-0">
+              <button class="edit-task text-yellow-600 hover:text-yellow-700" title="Sửa task">✏️</button>
+              <button class="delete-task text-red-600 hover:text-red-700" title="Xóa task">🗑️</button>
+            </div>
           </div>
-      <div id="progress-container-${tid}" class="mt-1 w-full bg-gray-200 rounded-full h-2">
-        <div class="bg-green-600 h-2 rounded-full transition-all duration-300" style="width: ${t.progress || 0}%;"></div>
-      </div>`;
-
-    col.appendChild(row);
-
-    // Sự kiện kéo thả
-    row.addEventListener("dragstart", (e) => {
-      e.dataTransfer.setData("type", "task");
-      e.dataTransfer.setData("taskId", tid);
-    });
-    
-    // Sự kiện chọn emoji
-    row.querySelector(".emoji-picker-btn").addEventListener("click", (e) => {
-      e.stopPropagation(); // Ngăn sự kiện drag
-      const emojiList = ["👍", "🎉", "🔥", "🤔", "👀", "🚀", "❤️", "💯", "✅", "⚠️", "❌"];
-      const picker = document.createElement('div');
-      picker.className = 'absolute z-10 bg-white shadow-lg rounded p-2 flex flex-wrap gap-1';
-      
-      // Lấy vị trí của nút emoji-picker-btn để đặt pop-up
-      const rect = e.target.getBoundingClientRect();
-      picker.style.top = `${rect.bottom + window.scrollY + 5}px`;
-      picker.style.left = `${rect.left + window.scrollX}px`;
-      
-      emojiList.forEach(emoji => {
-        const btn = document.createElement('button');
-        btn.textContent = emoji;
-        btn.className = 'hover:bg-gray-200 p-1 rounded';
-btn.onclick = async () => {
-  await updateDoc(doc(db, "tasks", tid), { emoji: emoji });
-  picker.remove();
-
-  const userDisplayName = getUserDisplayName(currentUser?.email || "Ẩn danh");
-
-  // Lấy thông tin group
-  const groupSnap = await getDoc(doc(db, "groups", t.groupId));
-  const groupData = groupSnap.exists() ? groupSnap.data() : { title: "Không rõ" };
-
-  // 🔹 Thông báo nhanh
- // showToast(`${userDisplayName} thêm ${emoji} vào "${t.title}" (Group: ${groupData.title})`);
-
-  // 🔹 Ghi vào log (giống style cũ)
-  await logAction(t.projectId, `thêm cảm xúc ${emoji} vào task "${t.title}"`, t.groupId);
-};
-
-        picker.appendChild(btn);
-      });
-      document.body.appendChild(picker);
-      
-      const outsideClick = (event) => {
-        if (!picker.contains(event.target) && event.target !== row.querySelector(".emoji-picker-btn")) {
-          picker.remove();
-          document.removeEventListener('click', outsideClick);
-        }
-      };
-      document.addEventListener('click', outsideClick);
-    });
-
-    // Sự kiện click nút sửa
-    row.querySelector(".edit-task").addEventListener("click", () => {
-      openModal("Sửa Task", [
-        { id: "title", placeholder: "Task title", type: "text", value: t.title },
-        { id: "progress", label: "Tiến độ", type: "range", value: t.progress || 0 },
-        { id: "deadline", label: "Hạn chót", type: "date", value: t.deadline || "" }, // Thêm trường deadline
-        { id: "color", label: "Màu", type: "color", value: t.color || "#e5e7eb" }
-      ], async (vals) => {
-        const oldTitle = t.title;
-        const oldProgress = t.progress;
-        const oldDeadline = t.deadline || null;
-        const newDeadline = (vals.deadline && vals.deadline.trim()) ? vals.deadline.trim() : null;
-
-        const updatePayload = {
-            title: vals.title,
-            color: vals.color,
-            progress: parseInt(vals.progress),
-            updatedAt: serverTimestamp(),
-            updatedBy: currentUser?.email || "Ẩn danh",
-        };
-        // Cập nhật deadline nếu có
-        if (newDeadline) {
-            updatePayload.deadline = newDeadline;
-        } else {
-            updatePayload.deadline = deleteField();
+          <p class="text-gray-600 my-1">${taskData.description || ""}</p>
+          <div class="flex justify-between items-center text-xs text-gray-500 mt-2">
+            <span>Tiến độ: ${taskData.progress || 0}%</span>
+            <span>${deadlineText}</span>
+          </div>
+        `;
+        
+        // Thêm task vào đúng cột
+        const containerId = `${taskData.status}Col`;
+        const container = document.getElementById(containerId) || document.getElementById(`tasks-${taskData.groupId}`);
+        
+        if (container) {
+          // Tìm vị trí đúng để chèn
+          let inserted = false;
+          const currentTasks = Array.from(container.children);
+          for (const currentTask of currentTasks) {
+            const currentTaskId = currentTask.id.split('-')[1];
+            const currentTaskData = snapshot.docs.find(d => d.id === currentTaskId)?.data();
+            if (currentTaskData && taskData.updatedAt?.seconds > currentTaskData.updatedAt?.seconds) {
+              container.insertBefore(element, currentTask);
+              inserted = true;
+              break;
+            }
+          }
+          if (!inserted) {
+            container.appendChild(element);
+          }
         }
 
-        await updateDoc(doc(db, "tasks", tid), updatePayload);
-
-        if (oldTitle !== vals.title) {
-          await logAction(t.projectId, `cập nhật task "${oldTitle}" thành "${vals.title}"`, t.groupId);
-        }
-        if (oldProgress !== parseInt(vals.progress)) {
-          await logAction(t.projectId, `cập nhật tiến độ task "${vals.title}" từ ${oldProgress || 0}% lên ${parseInt(vals.progress)}%`, t.groupId);
-        }
-        if (!oldDeadline && newDeadline) {
-            await logAction(t.projectId, `đặt deadline cho task "${vals.title}" là ${formatDateVN(newDeadline)}`, t.groupId);
-        } else if (oldDeadline && newDeadline && oldDeadline !== newDeadline) {
-            await logAction(t.projectId, `đổi deadline task "${vals.title}" từ ${formatDateVN(oldDeadline)} sang ${formatDateVN(newDeadline)}`, t.groupId);
-        } else if (oldDeadline && !newDeadline) {
-            await logAction(t.projectId, `xóa deadline của task "${vals.title}"`, t.groupId);
-        }
-      });
-    });
-
-    // Sự kiện click nút comment
-    row.querySelector(".comment-task").addEventListener("click", () => {
-      openModal("Comment Task", [
-        { id: "comment", placeholder: "Nhập comment", type: "textarea", value: t.comment || "" }
-      ], async (vals) => {
-        if (vals.comment && vals.comment.trim().length > 0) {
-          await updateDoc(doc(db, "tasks", tid), {
-            comment: vals.comment.trim(),
-            updatedAt: serverTimestamp(),
-            updatedBy: currentUser?.email || "Ẩn danh"
-          });
-          await logAction(t.projectId, `thêm comment vào task "${t.title}"`, t.groupId);
-        } else {
-          await updateDoc(doc(db, "tasks", tid), {
-            comment: deleteField(),
-            updatedAt: serverTimestamp(),
-            updatedBy: currentUser?.email || "Ẩn danh"
-          });
-          await logAction(t.projectId, `xóa comment của task "${t.title}"`, t.groupId);
-        }
-      });
-    });
-
-    // Sự kiện click nút xóa
-    row.querySelector(".delete-task").addEventListener("click", async () => {
-      if (confirm("Bạn có chắc muốn xóa task này?")) {
-        await deleteDoc(doc(db, "tasks", tid));
-        await logAction(t.projectId, `xóa task "${t.title}"`, t.groupId);
+        element.addEventListener("dragstart", (e) => {
+          e.dataTransfer.setData("text/plain", "task"); // Chỉ định đây là task
+          e.dataTransfer.setData("taskId", tid);
+          e.dataTransfer.setData("type", "task");
+        });
+        
+        element.querySelector(".edit-task").addEventListener("click", () => editTask(tid, taskData));
+        element.querySelector(".delete-task").addEventListener("click", () => deleteTask(tid, taskData));
       }
     });
-  }
-
-  // Cập nhật trạng thái nút comment, thanh tiến độ và deadline
-  const hasComment = t.comment && t.comment.trim().length > 0;
-  const commentBtn = row.querySelector(".comment-task");
-  if (hasComment) {
-    commentBtn.classList.add("text-blue-600", "font-bold");
-  } else {
-    commentBtn.classList.remove("text-blue-600", "font-bold");
-  }
-  
-  // Cập nhật emoji
-  const emojiSpan = row.querySelector(`#task-emoji-${tid}`);
-  if (emojiSpan) {
-    emojiSpan.textContent = t.emoji || '';
-  }
-
-  const progressBar = row.querySelector(`#progress-container-${tid} div`);
-  if (progressBar) {
-    progressBar.style.width = `${t.progress || 0}%;`;
-  }
-
-  // Thêm class màu nền cho task nếu có deadline gần kề
-if (t.deadline) {
-    const daysLeft = daysUntil(t.deadline);
-    const deadlineClass = colorClassByDaysLeft(daysLeft);
-
-    // luôn bỏ màu trước khi xử lý
-    row.classList.remove("bg-red-100", "bg-yellow-200", "bg-orange-300");
-
-    // 🚫 Không áp màu nếu task đã Done
-    if (deadlineClass && t.status !== "done") {
-        row.classList.add(deadlineClass);
-    }
-} else {
-    row.classList.remove("bg-red-100", "bg-yellow-200", "bg-orange-300");
-}
-
-
-  const taskInfo = row.querySelector(`#task-info-${tid}`);
-  if (taskInfo) {
-      taskInfo.innerHTML = '';
-      if (t.deadline) {
-          const deadlineSpan = document.createElement('span');
-          deadlineSpan.className = "ml-1 text-gray-700";
-          deadlineSpan.innerHTML = `⏰ ${formatDateVN(t.deadline)}`;
-          taskInfo.appendChild(deadlineSpan);
-      }
-  }
-}
-
-// ===== Group CRUD (Thêm/Sửa/Xóa) =====
-async function addGroup(projectId) {
-  openModal("Thêm Group", [
-    { id: "title", placeholder: "Tên Group" },
-    { id: "deadline", placeholder: "Deadline", type: "date" }
-  ], async (vals) => {
-    if (!isAuthReady) return;
-    const deadline = vals.deadline && vals.deadline.trim() ? vals.deadline.trim() : null;
-    const newDocRef = await addDoc(collection(db, "groups"), {
-      title: vals.title,
-      projectId,
-      status: "todo",
-      deadline,
-      createdAt: serverTimestamp(),
-      createdBy: currentUser?.email || "Ẩn danh"
-    });
-
-    await logAction(projectId,
-      `thêm group mới "${vals.title}"` +
-      (deadline ? ` (deadline ${formatDateVN(deadline)})` : ``), newDocRef.id
-    );
   });
 }
 
-async function editGroup(groupId, g) {
-  openModal("Sửa Group", [
-    { id: "title", placeholder: "Tên", value: g.title },
-    { id: "deadline", placeholder: "Deadline", type: "date", value: g.deadline || "" }
-  ], async (vals) => {
-    if (!isAuthReady) return;
-    const oldDeadline = g.deadline || null;
-    const newDeadline = (vals.deadline && vals.deadline.trim()) ? vals.deadline.trim() : null;
+// ===== Thiết lập Drag & Drop =====
+let dragSrcEl = null;
 
-    const payload = {
-      title: vals.title,
-      updatedAt: serverTimestamp(),
-      updatedBy: currentUser?.email || "Ẩn danh",
-      ...(newDeadline ? { deadline: newDeadline } : { deadline: deleteField() })
-    };
-
-    await updateDoc(doc(db, "groups", groupId), payload);
-
-    if (g.title !== vals.title) {
-      await logAction(g.projectId, `cập nhật group "${g.title}" thành "${vals.title}"`, groupId);
-    }
-    if (!oldDeadline && newDeadline) {
-      await logAction(g.projectId, `đặt deadline cho group "${vals.title}" là ${formatDateVN(newDeadline)}`, groupId);
-    } else if (oldDeadline && newDeadline && oldDeadline !== newDeadline) {
-      await logAction(g.projectId, `đổi deadline group "${vals.title}" từ ${formatDateVN(oldDeadline)} sang ${formatDateVN(newDeadline)}`, groupId);
-    } else if (oldDeadline && !newDeadline) {
-      await logAction(g.projectId, `xóa deadline của group "${vals.title}"`, groupId);
-    }
-
-    const newData = { ...g, ...payload };
-    applyGroupColor(groupId, newData);
-  });
-}
-
-async function deleteGroup(groupId, g) {
-  if (!isAuthReady) return;
-  if (!confirm("Bạn có chắc muốn xóa group này?")) return;
-
-  const taskSnap = await getDocs(query(collection(db, "tasks"), where("groupId", "==", groupId)));
-  const tasksToDelete = taskSnap.docs.map(t => t.id);
-  await logAction(g.projectId, `xóa group "${g.title}" và ${tasksToDelete.length} task bên trong`, groupId);
-
-  taskSnap.forEach(async (t) => await deleteDoc(doc(db, "tasks", t.id)));
-  await deleteDoc(doc(db, "groups", groupId));
-}
-
-// ===== Task CRUD (Thêm) =====
-function openTaskModal(groupId, projectId) {
-  openModal("Thêm Task", [
-    { id: "title", placeholder: "Tên Task" },
-    { id: "comment", placeholder: "Comment (tùy chọn)", type: "textarea" },
-    { id: "deadline", label: "Hạn chót", type: "date" }, // Thêm trường deadline
-    { id: "color", label: "Màu", type: "color" },
-    { id: "progress", label: "Tiến độ", type: "range", value: 0 }
-  ], async (vals) => {
-    if (!isAuthReady) return;
-    const deadline = (vals.deadline && vals.deadline.trim()) ? vals.deadline.trim() : null;
-    const newDocRef = await addDoc(collection(db, "tasks"), {
-      title: vals.title,
-      comment: vals.comment || "",
-      deadline, // Lưu deadline vào task
-      color: vals.color || null,
-      progress: parseInt(vals.progress),
-      projectId,
-      groupId,
-      status: "todo",
-      createdAt: serverTimestamp(),
-      createdBy: currentUser?.email || "Ẩn danh"
-    });
-    await logAction(projectId, `thêm task mới "${vals.title}"` + (deadline ? ` (hạn chót ${formatDateVN(deadline)})` : ''), groupId);
-  });
-}
-
-// ===== Kéo & Thả (Drag & Drop) =====
 function setupDragDrop() {
-  ["inprogressCol", "doneCol"].forEach((colId) => {
-    const col = document.getElementById(colId);
-    if (!col) return;
-
-    col.addEventListener("dragover", (e) => e.preventDefault());
-
+  document.querySelectorAll(".grid-cols-3 > div:not(#logArea)").forEach(col => {
+    col.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      col.classList.add("bg-indigo-50");
+    });
+    col.addEventListener("dragleave", (e) => {
+      e.dataTransfer.dropEffect = "none";
+      col.classList.remove("bg-indigo-50");
+    });
     col.addEventListener("drop", async (e) => {
       e.preventDefault();
+      col.classList.remove("bg-indigo-50");
 
       const type = e.dataTransfer.getData("type");
       if (type !== "task") return;
-
+      
       const taskId = e.dataTransfer.getData("taskId");
       if (!taskId) return;
+      
+      const targetCol = e.currentTarget.id;
+      let newStatus = "";
+      let targetId = "";
 
-      const newStatus = colId === "inprogressCol" ? "inprogress" : "done";
+      if (targetCol === "inprogressCol") {
+          newStatus = "inprogress";
+      } else if (targetCol === "doneCol") {
+          newStatus = "done";
+      } else {
+          // Bắt trường hợp kéo vào cột ToDo (thả vào một group)
+          const targetGroup = e.target.closest("[id^='group-']");
+          if (targetGroup) {
+              newStatus = "todo";
+              targetId = targetGroup.id.replace('group-', '');
+          } else {
+              return;
+          }
+      }
 
       const taskRef = doc(db, "tasks", taskId);
       const taskSnap = await getDoc(taskRef);
       if (!taskSnap.exists()) return;
       const taskData = taskSnap.data();
+      
+      // Kiểm tra nếu task đang được kéo từ cột To Do sang cột To Do
+      if (taskData.status === "todo" && newStatus === "todo") {
+          // Không làm gì cả, vì việc kéo trong cột ToDo được xử lý bởi logic sắp xếp
+          return;
+      }
+      
       const groupData = (await getDoc(doc(db, "groups", taskData.groupId))).data();
-
+      
       // Cập nhật trạng thái và tiến độ
       const updatePayload = {
         status: newStatus,
@@ -995,9 +732,9 @@ function setupDragDrop() {
       if (newStatus === "done") {
         updatePayload.progress = 100;
       }
-
+      
       await updateDoc(taskRef, updatePayload);
-
+      
       // Ghi log hoạt động
       let logMessage = `chuyển task "${taskData.title}" sang trạng thái "${newStatus}"`;
       if (newStatus === "done") {
@@ -1005,17 +742,111 @@ function setupDragDrop() {
       }
       logMessage += ` trong group "${groupData.title}"`;
       await logAction(taskData.projectId, logMessage);
+
     });
   });
 }
 
-// ===== Listener cho các nút chức năng chính =====
-function setupGroupListeners(projectId) {
-  const addGroupBtn = document.getElementById("addGroupBtn");
-  if (addGroupBtn) {
-    addGroupBtn.addEventListener("click", () => addGroup(projectId));
+// ===== Chức năng tạo/sửa Group =====
+function addGroup(projectId) {
+  openModal("Tạo Group Mới", [
+    { id: "title", placeholder: "Tên Group" },
+    { id: "deadline", type: "date", label: "Hạn Chót" }
+  ], async (values) => {
+    if (values.title) {
+      await addDoc(collection(db, "groups"), {
+        projectId,
+        title: values.title,
+        deadline: values.deadline || null,
+        createdAt: serverTimestamp(),
+        createdBy: currentUser?.email || "Ẩn danh",
+        status: "todo"
+      });
+      await logAction(projectId, `tạo group "${values.title}"`);
+    }
+  });
+}
+
+function editGroup(groupId, currentData) {
+  openModal("Sửa Group", [
+    { id: "title", placeholder: "Tên Group", value: currentData.title },
+    { id: "deadline", type: "date", label: "Hạn Chót", value: currentData.deadline || "" }
+  ], async (values) => {
+    if (values.title) {
+      await updateDoc(doc(db, "groups", groupId), {
+        title: values.title,
+        deadline: values.deadline || deleteField()
+      });
+      await logAction(currentData.projectId, `cập nhật group "${currentData.title}"`);
+    }
+  });
+}
+
+async function deleteGroup(groupId, groupData) {
+  if (confirm("Bạn có chắc chắn muốn xóa group này và tất cả task bên trong?")) {
+    // Xóa tất cả các task thuộc group
+    const tasksQuery = query(collection(db, "tasks"), where("groupId", "==", groupId));
+    const tasksSnapshot = await getDocs(tasksQuery);
+    const deletePromises = tasksSnapshot.docs.map(d => deleteDoc(d.ref));
+    await Promise.all(deletePromises);
+    
+    // Xóa group
+    await deleteDoc(doc(db, "groups", groupId));
+    await logAction(groupData.projectId, `xóa group "${groupData.title}"`);
   }
 }
 
+// ===== Chức năng tạo/sửa Task =====
+function openTaskModal(groupId, projectId, currentData = null, taskId = null) {
+  const isEdit = !!currentData;
+  const title = isEdit ? "Sửa Task" : "Tạo Task Mới";
+  const fields = [
+    { id: "title", placeholder: "Tiêu đề Task", value: currentData?.title },
+    { id: "description", type: "textarea", placeholder: "Mô tả", value: currentData?.description },
+    { id: "progress", type: "range", value: currentData?.progress || 0 },
+    { id: "color", type: "color", value: currentData?.color || "#000000" },
+    { id: "deadline", type: "date", value: currentData?.deadline || "" }
+  ];
 
+  openModal(title, fields, async (values) => {
+    if (!values.title) return;
 
+    if (isEdit) {
+      await updateDoc(doc(db, "tasks", taskId), {
+        title: values.title,
+        description: values.description,
+        progress: parseInt(values.progress),
+        color: values.color,
+        deadline: values.deadline || deleteField(),
+        updatedAt: serverTimestamp(),
+        updatedBy: currentUser?.email || "Ẩn danh"
+      });
+      await logAction(projectId, `cập nhật task "${currentData.title}"`);
+    } else {
+      await addDoc(collection(db, "tasks"), {
+        projectId,
+        groupId,
+        title: values.title,
+        description: values.description,
+        progress: parseInt(values.progress),
+        color: values.color,
+        deadline: values.deadline || null,
+        status: "todo",
+        createdAt: serverTimestamp(),
+        createdBy: currentUser?.email || "Ẩn danh"
+      });
+      await logAction(projectId, `tạo task mới "${values.title}"`);
+    }
+  });
+}
+
+function editTask(taskId, currentData) {
+  openTaskModal(currentData.groupId, currentData.projectId, currentData, taskId);
+}
+
+async function deleteTask(taskId, taskData) {
+  if (confirm("Bạn có chắc chắn muốn xóa task này?")) {
+    await deleteDoc(doc(db, "tasks", taskId));
+    await logAction(taskData.projectId, `xóa task "${taskData.title}"`);
+  }
+}
