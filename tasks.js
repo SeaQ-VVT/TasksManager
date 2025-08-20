@@ -190,7 +190,6 @@ async function logAction(projectId, action, groupId = null) {
   });
 }
 
-// Biến lưu trữ listener logs để có thể hủy khi đổi dự án
 let logsUnsub = null;
 
 async function listenForLogs(projectId) {
@@ -199,8 +198,15 @@ async function listenForLogs(projectId) {
     logsUnsub = null;
   }
 
-  const userEmail = currentUser?.email || "Ẩn danh";
+  const userEmail = currentUser?.email || "guest"; // tránh chữ "Ẩn danh" gây lỗi ID
   const readRef = doc(db, "user_project_reads", `${userEmail}_${projectId}`);
+
+  // Ghi ngay lastSeen khi mở dự án (đảm bảo tạo doc)
+  await setDoc(readRef, {
+    user: userEmail,
+    projectId,
+    lastSeen: serverTimestamp()
+  }, { merge: true });
 
   const logsCol = collection(db, "logs");
   const q = query(logsCol, where("projectId", "==", projectId));
@@ -212,7 +218,7 @@ async function listenForLogs(projectId) {
     snapshot.forEach((docSnap) => logs.push(docSnap.data()));
     logs.sort((a, b) => b.timestamp - a.timestamp);
 
-    // Render bảng log (cái bảng luôn hiển thị tất cả)
+    // Render bảng log
     if (logEntries) {
       logEntries.innerHTML = "";
       logs.forEach((data) => {
@@ -224,29 +230,27 @@ async function listenForLogs(projectId) {
       });
     }
 
-    // 🔹 Lấy lastSeen mỗi lần có thay đổi
+    // Lọc log chưa xem
     const readSnap = await getDoc(readRef);
     const lastSeen = readSnap.exists() ? readSnap.data().lastSeen?.toDate() : null;
 
-    // 🔹 Lọc ra log mới hơn lastSeen
     const unread = [];
-    snapshot.forEach((docSnap) => {
-      const data = docSnap.data();
-      const ts = data.timestamp?.toDate();
-      if (!lastSeen || (ts && ts > lastSeen)) {
-        unread.push(data);
+    snapshot.docChanges().forEach((change) => {
+      if (change.type === "added") {
+        const data = change.doc.data();
+        const ts = data.timestamp?.toDate();
+        if (!lastSeen || (ts && ts > lastSeen)) {
+          unread.push(data);
+        }
       }
     });
 
-    unread.sort((a, b) => a.timestamp - b.timestamp);
-
-    // Hiện toast cho log chưa xem
     unread.forEach((data) => {
       const userDisplayName = getUserDisplayName(data.user);
       showToast(`${userDisplayName} đã ${data.action}.`);
     });
 
-    // 🔹 Cập nhật lại lastSeen ngay sau khi xử lý
+    // update lastSeen mỗi lần snapshot bắn
     await setDoc(readRef, {
       user: userEmail,
       projectId,
@@ -1106,6 +1110,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
