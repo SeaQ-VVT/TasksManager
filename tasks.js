@@ -946,6 +946,16 @@ async function addGroup(projectId) {
   ], async (vals) => {
     if (!isAuthReady) return;
     const deadline = vals.deadline && vals.deadline.trim() ? vals.deadline.trim() : null;
+        // 🔽 Check deadline Group <= Project
+    const pRef = doc(db, "projects", projectId);
+    const pSnap = await getDoc(pRef);
+    const pEnd = pSnap.exists() ? pSnap.data().endDate : null;
+
+    if (pEnd && deadline && deadline > pEnd) {
+      alert("❌ Deadline của Group không thể vượt quá deadline của Project!");
+      return;
+    }
+
     const newDocRef = await addDoc(collection(db, "groups"), {
       title: vals.title,
       projectId,
@@ -1108,6 +1118,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
