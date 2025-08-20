@@ -754,7 +754,7 @@ await logAction(t.projectId, `thêm cảm xúc ${emoji} vào task "${t.title}"`,
  // showToast(`${userDisplayName} thêm ${emoji} vào "${t.title}" (Group: ${groupData.title})`);
 
   // 🔹 Ghi vào log (giống style cũ)
-  await logAction(t.projectId, `thêm cảm xúc ${emoji} vào task "${t.title}"`, t.groupId);
+  //await logAction(t.projectId, `thêm cảm xúc ${emoji} vào task "${t.title}"`, t.groupId);
 };
 
         picker.appendChild(btn);
@@ -1055,6 +1055,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
