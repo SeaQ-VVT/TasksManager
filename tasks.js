@@ -85,30 +85,17 @@ function openModal(title, fields, onSave) {
           <label for="${f.id}" class="text-gray-700">Tiến độ (<span id="progress-value-${f.id}">${f.value || 0}</span>%)</label>
           <input id="${f.id}" type="range" min="0" max="100" value="${f.value || 0}" class="w-full">
         </div>`;
-} else if (f.type === "date") {
-  fieldsDiv.innerHTML += `
-    <div class="flex flex-col">
-      <label for="${f.id}" class="text-gray-700">${f.label || 'Hạn Chót'}:</label>
-      <div class="flex items-center gap-2">
-        <input id="${f.id}" type="date" class="border p-2 w-full rounded-md" value="${f.value || ""}">
-        <button type="button" id="clear-${f.id}" class="px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200">Xóa</button>
-      </div>
-    </div>`;
+    } else if (f.type === "date") {
+      fieldsDiv.innerHTML += `
+        <div class="flex flex-col">
+          <label for="${f.id}" class="text-gray-700">${f.label || 'Hạn Chót'}:</label>
+          <input id="${f.id}" type="date" class="border p-2 w-full rounded-md" value="${f.value || ""}">
+        </div>`;
     } else {
       fieldsDiv.innerHTML += `<input id="${f.id}" type="text" placeholder="${f.placeholder}" class="border p-2 w-full rounded-md" value="${f.value || ""}">`;
     }
   });
-// Gắn sự kiện cho nút "Xóa deadline"
-fields.forEach(f => {
-  if (f.type === "date") {
-    const clearBtn = document.getElementById(`clear-${f.id}`);
-    if (clearBtn) {
-      clearBtn.addEventListener("click", () => {
-        document.getElementById(f.id).value = "";
-      });
-    }
-  }
-});
+
   modal.classList.remove("hidden");
 
   const progressInput = document.getElementById("progress");
@@ -190,32 +177,27 @@ async function logAction(projectId, action, groupId = null) {
   });
 }
 
+// Biến lưu trữ listener logs để có thể hủy khi đổi dự án
+// Biến lưu trữ listener logs để có thể hủy khi đổi dự án
 let logsUnsub = null;
 
-async function listenForLogs(projectId) {
+function listenForLogs(projectId) {
+  // Hủy listener cũ để không bị nhận thông báo từ dự án khác
   if (logsUnsub) {
     logsUnsub();
     logsUnsub = null;
   }
 
-  const userEmail = currentUser?.email || "guest"; 
-  const readRef = doc(db, "user_project_reads", `${userEmail}_${projectId}`);
-
-  // 🔹 Ghi doc ngay khi mở dự án để chắc chắn tạo ra
-  await setDoc(readRef, {
-    user: userEmail,
-    projectId,
-    lastSeen: serverTimestamp()
-  }, { merge: true });
-
   const logsCol = collection(db, "logs");
   const q = query(logsCol, where("projectId", "==", projectId));
 
-  logsUnsub = onSnapshot(q, async (snapshot) => {
+  let initial = true;
+
+  logsUnsub = onSnapshot(q, (snapshot) => {
     const logEntries = document.getElementById("logEntries");
     const logs = [];
 
-    snapshot.forEach((docSnap) => logs.push(docSnap.data()));
+    snapshot.forEach((doc) => logs.push(doc.data()));
     logs.sort((a, b) => b.timestamp - a.timestamp);
 
     // Render bảng log
@@ -230,30 +212,28 @@ async function listenForLogs(projectId) {
       });
     }
 
-    // 🔹 Lấy lastSeen mới nhất từ Firestore
-    const readSnap = await getDoc(readRef);
-    const lastSeen = readSnap.exists() ? readSnap.data().lastSeen?.toDate() : null;
+    // 🔹 Lần đầu vào: chỉ toast log mới nhất
+    if (initial) {
+      initial = false;
+      if (logs.length > 0) {
+        const newest = logs[0];
+        const userDisplayName = getUserDisplayName(newest.user);
+        showToast(`${userDisplayName} đã ${newest.action}.`);
+      }
+      return;
+    }
 
-    // 🔹 Chỉ toast log mới hơn lastSeen
+    // 🔹 Sau đó: chỉ toast log mới được thêm
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added") {
         const data = change.doc.data();
-        const ts = data.timestamp?.toDate();
-        if (!lastSeen || (ts && ts > lastSeen)) {
-          const userDisplayName = getUserDisplayName(data.user);
-          showToast(`${userDisplayName} đã ${data.action}.`);
-        }
+        const userDisplayName = getUserDisplayName(data.user);
+        showToast(`${userDisplayName} đã ${data.action}.`);
       }
     });
-
-    // 🔹 Update lại lastSeen
-    await setDoc(readRef, {
-      user: userEmail,
-      projectId,
-      lastSeen: serverTimestamp()
-    }, { merge: true });
   });
 }
+
 
 // ===== Cấu hình và Helpers cho Deadline =====
 const DEADLINE_CFG = {
@@ -975,14 +955,7 @@ async function editGroup(groupId, g) {
       updatedBy: currentUser?.email || "Ẩn danh",
       ...(newDeadline ? { deadline: newDeadline } : { deadline: deleteField() })
     };
-const pRef = doc(db, "projects", g.projectId);
-const pSnap = await getDoc(pRef);
-const pEnd = pSnap.exists() ? pSnap.data().endDate : null;
 
-if (pEnd && newDeadline && newDeadline > pEnd) {
-  alert("❌ Deadline của Group không thể vượt quá deadline của Project!");
-  return;
-}
     await updateDoc(doc(db, "groups", groupId), payload);
 
     if (g.title !== vals.title) {
@@ -1024,16 +997,6 @@ function openTaskModal(groupId, projectId) {
   ], async (vals) => {
     if (!isAuthReady) return;
     const deadline = (vals.deadline && vals.deadline.trim()) ? vals.deadline.trim() : null;
-    // 🔽 Thêm đoạn check ở đây
-const gRef = doc(db, "groups", groupId);
-const gSnap = await getDoc(gRef);
-const gDeadline = gSnap.exists() ? gSnap.data().deadline : null;
-
-if (gDeadline && deadline && deadline > gDeadline) {
-  alert("❌ Deadline của Task không thể vượt quá deadline của Group!");
-  return;
-}
-
     const newDocRef = await addDoc(collection(db, "tasks"), {
       title: vals.title,
       comment: vals.comment || "",
@@ -1106,10 +1069,6 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
-
-
-
-
 
 
 
