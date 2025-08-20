@@ -180,7 +180,7 @@ async function logAction(projectId, action, groupId = null) {
 // Biến lưu trữ listener logs để có thể hủy khi đổi dự án
 let logsUnsub = null;
 
-function listenForLogs(projectId) {
+async function listenForLogs(projectId) {
   // Hủy listener cũ để không bị nhận thông báo từ dự án khác
   if (logsUnsub) {
     logsUnsub();
@@ -189,38 +189,35 @@ function listenForLogs(projectId) {
 
   const logsCol = collection(db, "logs");
   const q = query(logsCol, where("projectId", "==", projectId));
+  
+  // ===============================================
+  // THÊM ĐOẠN NÀY ĐỂ TẢI NGAY TOÀN BỘ LOG LỊCH SỬ
+  // ===============================================
+  const logEntries = document.getElementById("logEntries");
+  if (logEntries) {
+    const querySnapshot = await getDocs(q);
+    const logs = [];
+    querySnapshot.forEach((doc) => logs.push(doc.data()));
+    logs.sort((a, b) => {
+      const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(0);
+      const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(0);
+      return dateB - dateA;
+    });
 
-  // Biến cờ để kiểm tra lần chạy đầu tiên
-  let isInitialLoad = true;
-
+    logEntries.innerHTML = "";
+    logs.forEach((data) => {
+      const timestamp = data.timestamp?.toDate ? data.timestamp.toDate().toLocaleString() : "-";
+      const userDisplayName = getUserDisplayName(data.user);
+      const logItem = document.createElement("div");
+      logItem.textContent = `[${timestamp}] ${userDisplayName} đã ${data.action}.`;
+      logEntries.appendChild(logItem);
+    });
+  }
+  
+  // ======================================================
+  // BẮT ĐẦU LẮNG NGHE CÁC THAY ĐỔI MỚI SAU KHI TẢI XONG
+  // ======================================================
   logsUnsub = onSnapshot(q, (snapshot) => {
-    const logEntries = document.getElementById("logEntries");
-    if (logEntries) {
-      // Luôn render toàn bộ log vào giao diện chính
-      const logs = [];
-      snapshot.forEach((doc) => logs.push(doc.data()));
-      logs.sort((a, b) => {
-        const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(0);
-        const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(0);
-        return dateB - dateA;
-      });
-
-      logEntries.innerHTML = "";
-      logs.forEach((data) => {
-        const timestamp = data.timestamp?.toDate ? data.timestamp.toDate().toLocaleString() : "-";
-        const userDisplayName = getUserDisplayName(data.user);
-        const logItem = document.createElement("div");
-        logItem.textContent = `[${timestamp}] ${userDisplayName} đã ${data.action}.`;
-        logEntries.appendChild(logItem);
-      });
-    }
-
-    // Nếu đây là lần đầu tiên tải, không hiển thị thông báo
-    if (isInitialLoad) {
-      isInitialLoad = false;
-      return;
-    }
-
     // Duyệt qua các thay đổi để chỉ tạo thông báo cho các log mới được thêm vào
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added") {
@@ -1023,6 +1020,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
