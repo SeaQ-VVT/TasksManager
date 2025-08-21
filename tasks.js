@@ -719,7 +719,8 @@ function renderTask(docSnap) {
     row.innerHTML = `
       <div class="flex justify-between items-center w-full">
         <div class="flex items-center">
-            <span class="truncate font-medium">${t.title}</span>
+           
+            <span class="font-medium">${t.title}</span>
             <span id="task-emoji-${tid}" class="ml-1">${t.emoji || ''}</span>
         </div>
         <div class="space-x-1 flex-shrink-0">
@@ -1146,6 +1147,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
