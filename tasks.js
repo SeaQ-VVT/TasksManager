@@ -749,8 +749,7 @@ row.querySelector(".emoji-picker-btn").addEventListener("click", (e) => {
   e.stopPropagation(); // Ngăn sự kiện drag
 
   // Danh sách emoji
-  const emojiList = ["👍", "🎉", "🔥", "🤔", "👀", "🚀", "❤️", "💯", "✅", "⚠️"];
-
+  const emojiList = ["❤️", "👍", "😄", "😢"];
   const picker = document.createElement('div');
   picker.className = 'absolute z-10 bg-white shadow-lg rounded p-2 flex flex-wrap gap-1';
 
@@ -1147,6 +1146,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
