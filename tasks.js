@@ -938,7 +938,7 @@ if (emojiSpan) {
             emojiDiv.className = "relative inline-block";
             emojiDiv.innerHTML = `
                 <span class="text-base">${emoji}</span>
-                <span class="absolute top-[-5px] right-[-5px] text-xs font-bold text-white bg-red-500 rounded-full w-4 h-4 flex items-center justify-center">
+                <span class="absolute top-[-5px] right-[-5px] text-xs font-bold text-gray-700">
                     ${count}
                 </span>
             `;
@@ -948,7 +948,6 @@ if (emojiSpan) {
         emojiSpan.textContent = t.emoji || '';
     }
 }
-
 
   const progressBar = row.querySelector(`#progress-container-${tid} div`);
   if (progressBar) {
@@ -1168,6 +1167,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
