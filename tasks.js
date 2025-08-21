@@ -719,9 +719,8 @@ function renderTask(docSnap) {
     row.innerHTML = `
       <div class="flex justify-between items-center w-full">
         <div class="flex items-center">
-           
             <span class="font-medium">${t.title}</span>
-            <span id="task-emoji-${tid}" class="ml-1">${t.emoji || ''}</span>
+            <span id="task-emoji-${tid}" class="ml-1 flex items-center"></span>
         </div>
         <div class="space-x-1 flex-shrink-0">
           <button class="emoji-picker-btn text-gray-400 hover:text-yellow-600" title="Chọn cảm xúc">🙂</button>
@@ -874,7 +873,7 @@ if (gDeadline && newDeadline && newDeadline > gDeadline) {
         } else if (oldDeadline && newDeadline && oldDeadline !== newDeadline) {
             await logAction(t.projectId, `đổi deadline task "${vals.title}" từ ${formatDateVN(oldDeadline)} sang ${formatDateVN(newDeadline)}`, t.groupId);
         } else if (oldDeadline && !newDeadline) {
-            await logAction(t.projectId, `xóa deadline của task "${vals.title}"`, t.groupId);
+            await logAction(t.projectId, `xóa deadline của task "${t.title}"`, t.groupId);
         }
       });
     });
@@ -920,15 +919,34 @@ if (gDeadline && newDeadline && newDeadline > gDeadline) {
     commentBtn.classList.remove("text-blue-600", "font-bold");
   }
   
-  // Cập nhật emoji
+// Cập nhật emoji
 const emojiSpan = row.querySelector(`#task-emoji-${tid}`);
 if (emojiSpan) {
-  if (t.emoji && typeof t.emoji === "object") {
-    // Hiển thị tất cả emoji của mọi user
-    emojiSpan.textContent = Object.values(t.emoji).join(" ");
-  } else {
-    emojiSpan.textContent = t.emoji || '';
-  }
+    if (t.emoji && typeof t.emoji === "object") {
+        const emojiCounts = {};
+        // Đếm số lượng của từng loại emoji
+        Object.values(t.emoji).forEach(emoji => {
+            emojiCounts[emoji] = (emojiCounts[emoji] || 0) + 1;
+        });
+
+        // Xóa nội dung cũ
+        emojiSpan.innerHTML = "";
+        
+        // Tạo các div riêng cho từng emoji và số đếm
+        Object.entries(emojiCounts).forEach(([emoji, count]) => {
+            const emojiDiv = document.createElement("div");
+            emojiDiv.className = "relative inline-block";
+            emojiDiv.innerHTML = `
+                <span class="text-base">${emoji}</span>
+                <span class="absolute top-[-5px] right-[-5px] text-xs font-bold text-white bg-red-500 rounded-full w-4 h-4 flex items-center justify-center">
+                    ${count}
+                </span>
+            `;
+            emojiSpan.appendChild(emojiDiv);
+        });
+    } else {
+        emojiSpan.textContent = t.emoji || '';
+    }
 }
 
 
@@ -965,6 +983,10 @@ if (t.deadline) {
       }
   }
 }
+
+
+
+
 
 // ===== Group CRUD (Thêm/Sửa/Xóa) =====
 async function addGroup(projectId) {
@@ -1146,6 +1168,7 @@ function setupGroupListeners(projectId) {
     addGroupBtn.addEventListener("click", () => addGroup(projectId));
   }
 }
+
 
 
 
